@@ -8,15 +8,13 @@ echo ==========================================
 echo.
 
 REM Check Python is installed
-python --version >nul 2>&1
-if errorlevel 1 (
+where python >nul 2>&1
+if %errorlevel% neq 0 (
     echo [ERROR] Python is not installed or not in PATH.
     echo.
     echo Download Python from https://www.python.org/downloads/
     echo Make sure to check "Add Python to PATH" during installation.
-    echo.
-    pause
-    exit /b 1
+    goto :done
 )
 
 REM Show Python version
@@ -26,17 +24,15 @@ echo.
 
 REM Install dependencies if needed
 python -c "import PyQt6" 2>nul
-if errorlevel 1 (
+if %errorlevel% neq 0 (
     echo Installing dependencies (first run only, this may take a minute)...
     echo.
     python -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui
-    if errorlevel 1 (
+    if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Failed to install dependencies.
         echo Try running manually: python -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui
-        echo.
-        pause
-        exit /b 1
+        goto :done
     )
     echo.
     echo Dependencies installed successfully.
@@ -47,12 +43,12 @@ echo Starting iOpenPod...
 echo.
 python main.py
 
-if errorlevel 1 (
+if %errorlevel% neq 0 (
     echo.
     echo [ERROR] iOpenPod exited with an error.
-    echo.
-    pause
-    exit /b 1
 )
 
-pause
+:done
+echo.
+echo Press any key to close...
+pause >nul

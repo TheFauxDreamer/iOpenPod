@@ -14,7 +14,7 @@ if ! command -v python3 &>/dev/null; then
     echo "Install it from https://www.python.org/downloads/"
     echo "or via Homebrew: brew install python"
     echo
-    read -p "Press Enter to close..."
+    read -rp "Press Enter to close..."
     exit 1
 fi
 
@@ -37,7 +37,7 @@ for d in deps:
         echo "[ERROR] Failed to install dependencies."
         echo "Try running manually: python3 -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui"
         echo
-        read -p "Press Enter to close..."
+        read -rp "Press Enter to close..."
         exit 1
     fi
     echo
@@ -53,7 +53,7 @@ status=$?
 if [ $status -ne 0 ]; then
     echo
     echo "[ERROR] iOpenPod exited with an error (code $status)."
-    echo
-    read -p "Press Enter to close..."
-    exit $status
 fi
+
+echo
+read -rp "Press Enter to close..."
