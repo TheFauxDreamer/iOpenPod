@@ -44,7 +44,11 @@ if %errorlevel% neq 0 (
 )
 
 echo Starting iOpenPod...
-echo.
 
-REM Launch the app detached so this window can close cleanly
-start "" python main.py
+REM Use pythonw for GUI apps (no console window), fall back to python
+where pythonw >nul 2>&1
+if %errorlevel% equ 0 (
+    start "" pythonw main.py
+) else (
+    start "iOpenPod" /b python main.py
+)
