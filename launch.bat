@@ -14,7 +14,9 @@ if %errorlevel% neq 0 (
     echo.
     echo Download Python from https://www.python.org/downloads/
     echo Make sure to check "Add Python to PATH" during installation.
-    goto :done
+    echo.
+    pause
+    exit /b 1
 )
 
 REM Show Python version
@@ -32,7 +34,9 @@ if %errorlevel% neq 0 (
         echo.
         echo [ERROR] Failed to install dependencies.
         echo Try running manually: python -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui
-        goto :done
+        echo.
+        pause
+        exit /b 1
     )
     echo.
     echo Dependencies installed successfully.
@@ -41,14 +45,6 @@ if %errorlevel% neq 0 (
 
 echo Starting iOpenPod...
 echo.
-python main.py
 
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] iOpenPod exited with an error.
-)
-
-:done
-echo.
-echo Press any key to close...
-pause >nul
+REM Launch the app detached so this window can close cleanly
+start "" python main.py

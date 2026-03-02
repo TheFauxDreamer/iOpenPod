@@ -50,14 +50,5 @@ for d in deps:
 fi
 
 echo "Starting iOpenPod..."
-echo
-python3 main.py
-status=$?
-
-if [ $status -ne 0 ]; then
-    echo
-    echo "[ERROR] iOpenPod exited with an error (code $status)."
-fi
-
-echo
-read -rp "Press Enter to close..."
+python3 main.py &
+disown
