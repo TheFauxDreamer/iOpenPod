@@ -24,7 +24,7 @@ python --version
 echo.
 
 REM Install uv if needed
-where uv >nul 2>&1
+python -m uv --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo Installing uv package manager...
     echo.
@@ -41,7 +41,7 @@ if %errorlevel% neq 0 (
 
 REM Sync dependencies
 echo Syncing dependencies...
-uv sync
+python -m uv sync
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] Failed to sync dependencies.
@@ -53,7 +53,7 @@ echo.
 
 echo Starting iOpenPod...
 echo.
-uv run python main.py
+python -m uv run python main.py
 
 echo.
 echo iOpenPod has closed.
