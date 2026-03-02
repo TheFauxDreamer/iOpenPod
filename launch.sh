@@ -25,30 +25,39 @@ fi
 echo "Found: $(python3 --version)"
 echo
 
-# Install dependencies if needed
-if ! python3 -c "import PyQt6" 2>/dev/null; then
-    echo "Installing dependencies (first run only, this may take a minute)..."
+# Install uv if needed
+if ! command -v uv &>/dev/null; then
+    echo "Installing uv package manager..."
     echo
-    python3 -m pip install -r <(python3 -c "
-import tomllib
-with open('pyproject.toml', 'rb') as f:
-    deps = tomllib.load(f)['project']['dependencies']
-for d in deps:
-    print(d)
-")
-    if [ $? -ne 0 ]; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Reload PATH so uv is available immediately
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    if ! command -v uv &>/dev/null; then
         echo
-        echo "[ERROR] Failed to install dependencies."
-        echo "Try running manually: python3 -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui"
+        echo "[ERROR] Failed to install uv."
         echo
         read -rp "Press Enter to close..."
         exit 1
     fi
     echo
-    echo "Dependencies installed successfully."
-    echo
 fi
 
+# Sync dependencies
+echo "Syncing dependencies..."
+uv sync
+if [ $? -ne 0 ]; then
+    echo
+    echo "[ERROR] Failed to sync dependencies."
+    echo
+    read -rp "Press Enter to close..."
+    exit 1
+fi
+echo
+
 echo "Starting iOpenPod..."
-python3 main.py &
-disown
+echo
+uv run python3 main.py
+
+echo
+echo "iOpenPod has closed."
+read -rp "Press Enter to close..."

@@ -19,36 +19,42 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM Show Python version
 echo Found:
 python --version
 echo.
 
-REM Install dependencies if needed
-python -c "import PyQt6" 2>nul
+REM Install uv if needed
+where uv >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Installing dependencies (first run only, this may take a minute)...
+    echo Installing uv package manager...
     echo.
-    python -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui
+    python -m pip install uv
     if %errorlevel% neq 0 (
         echo.
-        echo [ERROR] Failed to install dependencies.
-        echo Try running manually: python -m pip install PyQt6 numpy Pillow pycryptodome mutagen pyusb dearpygui
+        echo [ERROR] Failed to install uv.
         echo.
         pause
         exit /b 1
     )
     echo.
-    echo Dependencies installed successfully.
-    echo.
 )
+
+REM Sync dependencies
+echo Syncing dependencies...
+uv sync
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Failed to sync dependencies.
+    echo.
+    pause
+    exit /b 1
+)
+echo.
 
 echo Starting iOpenPod...
+echo.
+uv run python main.py
 
-REM Use pythonw for GUI apps (no console window), fall back to python
-where pythonw >nul 2>&1
-if %errorlevel% equ 0 (
-    start "" pythonw main.py
-) else (
-    start "iOpenPod" /b python main.py
-)
+echo.
+echo iOpenPod has closed.
+pause
