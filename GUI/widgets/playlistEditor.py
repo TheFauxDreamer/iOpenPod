@@ -187,11 +187,11 @@ _COMBO_CSS = f"""
         margin-right: 6px;
     }}
     QComboBox QAbstractItemView {{
-        background: #2a2d3a;
+        background: {Colors.MENU_BG};
         border: 1px solid {Colors.BORDER};
         color: {Colors.TEXT_PRIMARY};
         selection-background-color: {Colors.ACCENT};
-        selection-color: white;
+        selection-color: {Colors.TEXT_PRIMARY};
         padding: 2px;
     }}
 """
@@ -684,7 +684,7 @@ class SmartPlaylistEditor(QFrame):
         # ── Header: Name ──────────────────────────────────────
         header = QHBoxLayout()
         header.setSpacing(8)
-        icon = QLabel("🧠")
+        icon = QLabel("◇")
         icon.setFont(QFont(FONT_FAMILY, 18))
         icon.setStyleSheet("background: transparent; border: none;")
         header.addWidget(icon)
@@ -737,7 +737,7 @@ class SmartPlaylistEditor(QFrame):
         self._rules_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._rules_scroll.setStyleSheet(f"""
             QScrollArea {{
-                background: rgba(0,0,0,30);
+                background: {Colors.SURFACE};
                 border: 1px solid {Colors.BORDER_SUBTLE};
                 border-radius: {Metrics.BORDER_RADIUS_SM}px;
             }}
@@ -1111,7 +1111,7 @@ class RegularPlaylistEditor(QFrame):
         # ── Header: Name ──────────────────────────────────────
         header = QHBoxLayout()
         header.setSpacing(8)
-        icon = QLabel("📋")
+        icon = QLabel("≡")
         icon.setFont(QFont(FONT_FAMILY, 18))
         icon.setStyleSheet("background: transparent; border: none;")
         header.addWidget(icon)
@@ -1182,7 +1182,7 @@ class RegularPlaylistEditor(QFrame):
 
         # ── Info area (for future options) ────────────────────
         info_label = QLabel(
-            "💡 Tracks can be added to this playlist from the music browser."
+            "Tracks can be added to this playlist from the music browser."
         )
         info_label.setFont(QFont(FONT_FAMILY, 9))
         info_label.setStyleSheet(
@@ -1303,8 +1303,8 @@ class NewPlaylistDialog(QDialog):
         self.setFixedSize(320, 200)
         self.setStyleSheet(f"""
             QDialog {{
-                background: #222233;
-                color: white;
+                background: {Colors.DIALOG_BG};
+                color: {Colors.TEXT_PRIMARY};
             }}
         """)
 
@@ -1372,5 +1372,5 @@ class NewPlaylistDialog(QDialog):
 
 
 # Re-export icons used by playlist browser
-_ICON_REGULAR = "📋"
-_ICON_SMART = "🧠"
+_ICON_REGULAR = "≡"
+_ICON_SMART = "◇"

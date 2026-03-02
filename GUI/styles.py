@@ -3,6 +3,11 @@ Centralized style definitions for iOpenPod.
 
 All colors, dimensions, and reusable stylesheet fragments live here so that
 every widget draws from a single visual language.
+
+The ``Colors`` object is a dynamic proxy – its attributes change when the
+theme or accent color is updated via ``ThemeManager``.  Widgets that embed
+color values into inline stylesheets must reconnect on
+``ThemeManager.theme_changed`` to pick up changes.
 """
 
 import sys
@@ -34,48 +39,38 @@ else:
         ' "Ubuntu", "DejaVu Sans"'
     )
 
-# ── Color palette ────────────────────────────────────────────────────────────
+# ── Color proxy ─────────────────────────────────────────────────────────────
 
 
-class Colors:
-    """Named colors used throughout the app."""
-    # Primary accent
-    ACCENT = "#409cff"
-    ACCENT_LIGHT = "#60b0ff"
-    ACCENT_DIM = "rgba(64,156,255,80)"
-    ACCENT_HOVER = "rgba(64,156,255,120)"
-    ACCENT_PRESS = "rgba(64,156,255,60)"
-    ACCENT_BORDER = "rgba(64,156,255,100)"
+class _ColorsProxy:
+    """Dynamic proxy that delegates to ThemeManager's active palette + accent.
 
-    # Surfaces
-    BG_DARK = "#1a1a2e"
-    BG_MID = "#1e1e32"
-    SURFACE = "rgba(255,255,255,8)"
-    SURFACE_ALT = "rgba(255,255,255,12)"
-    SURFACE_RAISED = "rgba(255,255,255,18)"
-    SURFACE_HOVER = "rgba(255,255,255,25)"
-    SURFACE_ACTIVE = "rgba(255,255,255,35)"
-    MENU_BG = "#2a2a40"  # Opaque — QMenu on macOS renders rgba transparency
+    Import and use as before::
 
-    # Text
-    TEXT_PRIMARY = "rgba(255,255,255,230)"
-    TEXT_SECONDARY = "rgba(255,255,255,150)"
-    TEXT_TERTIARY = "rgba(255,255,255,100)"
-    TEXT_DISABLED = "rgba(255,255,255,60)"
+        from GUI.styles import Colors
+        Colors.ACCENT      # current accent hex
+        Colors.BG_DARK     # current theme background
+    """
 
-    # Borders
-    BORDER = "rgba(255,255,255,30)"
-    BORDER_SUBTLE = "rgba(255,255,255,15)"
-    BORDER_FOCUS = "rgba(64,156,255,150)"
+    # Accent attributes are served from AccentPalette
+    _ACCENT_ATTRS = frozenset({
+        "ACCENT", "ACCENT_LIGHT", "ACCENT_DIM", "ACCENT_HOVER",
+        "ACCENT_PRESS", "ACCENT_BORDER", "SELECTION", "BORDER_FOCUS",
+    })
 
-    # Misc
-    GRIDLINE = "rgba(255,255,255,12)"
-    SELECTION = "rgba(64,156,255,90)"
-    STAR = "#ffc857"
-    DANGER = "#ff6b6b"
-    SUCCESS = "#51cf66"
-    WARNING = "#fcc419"
+    def __getattr__(self, name: str):
+        # Lazy import to avoid circular import at module load time
+        from GUI.theme import ThemeManager
+        tm = ThemeManager.instance()
+        if name in self._ACCENT_ATTRS:
+            return getattr(tm.accent, name)
+        return getattr(tm.palette, name)
 
+
+Colors = _ColorsProxy()
+
+
+# ── Metrics ──────────────────────────────────────────────────────────────────
 
 class Metrics:
     """Shared dimension constants."""
@@ -85,7 +80,7 @@ class Metrics:
     BORDER_RADIUS_XL = 12
 
     GRID_ITEM_W = 172
-    GRID_ITEM_H = 230
+    GRID_ITEM_H = 240  # Was 230 — more text breathing room
     GRID_ART_SIZE = 152
     GRID_SPACING = 14
 
@@ -105,6 +100,8 @@ class DarkScrollbarStyle(QProxyStyle):
     Qt stylesheet-based scrollbar styling is unreliable on Windows with
     Fusion (CSS is silently ignored). This proxy style paints scrollbars
     directly via QPainter so they always render correctly.
+
+    Thumb colors are mutable so ThemeManager can update them at runtime.
     """
 
     _THICKNESS = 8                         # thin like macOS/VS Code
@@ -283,6 +280,9 @@ def scrollbar_css(width: int = Metrics.SCROLLBAR_W, orient: str = "vertical") ->
     through (especially on Windows where the default blue bar is visible
     if any sub-element is left unstyled).
     """
+    from GUI.theme import ThemeManager
+    p = ThemeManager.instance().palette
+
     bar = f"QScrollBar:{orient}"
     r = max(width // 2, 1)
     if orient == "vertical":
@@ -295,15 +295,15 @@ def scrollbar_css(width: int = Metrics.SCROLLBAR_W, orient: str = "vertical") ->
                 border: none;
             }}
             {bar}::handle {{
-                background: rgba(255,255,255,30);
+                background: {p.SCROLL_THUMB};
                 border-radius: {r}px;
                 min-height: {Metrics.SCROLLBAR_MIN_H}px;
             }}
             {bar}::handle:hover {{
-                background: rgba(255,255,255,50);
+                background: {p.SCROLL_THUMB_HOVER};
             }}
             {bar}::handle:pressed {{
-                background: rgba(255,255,255,65);
+                background: {p.SCROLL_THUMB_PRESS};
             }}
             {bar}::add-line, {bar}::sub-line {{
                 border: none; background: none; height: 0px; width: 0px;
@@ -325,15 +325,15 @@ def scrollbar_css(width: int = Metrics.SCROLLBAR_W, orient: str = "vertical") ->
                 border: none;
             }}
             {bar}::handle {{
-                background: rgba(255,255,255,30);
+                background: {p.SCROLL_THUMB};
                 border-radius: {r}px;
                 min-width: {Metrics.SCROLLBAR_MIN_H}px;
             }}
             {bar}::handle:hover {{
-                background: rgba(255,255,255,50);
+                background: {p.SCROLL_THUMB_HOVER};
             }}
             {bar}::handle:pressed {{
-                background: rgba(255,255,255,65);
+                background: {p.SCROLL_THUMB_PRESS};
             }}
             {bar}::add-line, {bar}::sub-line {{
                 border: none; background: none; height: 0px; width: 0px;
@@ -358,36 +358,40 @@ def scrollbar_corner_css() -> str:
 
 
 def btn_css(
-    bg: str = Colors.SURFACE_RAISED,
-    bg_hover: str = Colors.SURFACE_HOVER,
-    bg_press: str = Colors.SURFACE_ALT,
-    fg: str = "white",
+    bg: str = "",
+    bg_hover: str = "",
+    bg_press: str = "",
+    fg: str = "",
     border: str = "none",
     radius: int = Metrics.BORDER_RADIUS_SM,
     padding: str = f"{Metrics.BTN_PADDING_V}px {Metrics.BTN_PADDING_H}px",
     extra: str = "",
 ) -> str:
     """Standard button stylesheet."""
+    _bg = bg or Colors.SURFACE_RAISED
+    _bg_hover = bg_hover or Colors.SURFACE_HOVER
+    _bg_press = bg_press or Colors.SURFACE_ALT
+    _fg = fg or Colors.TEXT_PRIMARY
     return f"""
         QPushButton {{
-            background: {bg};
+            background: {_bg};
             border: {border};
             border-radius: {radius}px;
-            color: {fg};
+            color: {_fg};
             padding: {padding};
             {extra}
         }}
         QPushButton:hover {{
-            background: {bg_hover};
+            background: {_bg_hover};
         }}
         QPushButton:pressed {{
-            background: {bg_press};
+            background: {_bg_press};
         }}
     """
 
 
 def accent_btn_css() -> str:
-    """Primary action button (blue accent)."""
+    """Primary action button (accent colored)."""
     return btn_css(
         bg=Colors.ACCENT_DIM,
         bg_hover=Colors.ACCENT_HOVER,
@@ -398,11 +402,17 @@ def accent_btn_css() -> str:
 
 # ── Application-level stylesheet ────────────────────────────────────────────
 
-APP_STYLESHEET = f"""
+def build_app_stylesheet() -> str:
+    """Build the global QApplication stylesheet from the active theme."""
+    from GUI.theme import ThemeManager
+    tm = ThemeManager.instance()
+    p = tm.palette
+    a = tm.accent
+
+    return f"""
     /* ── Base ──────────────────────────────────────────────────── */
     QMainWindow {{
-        background: qlineargradient(x1:0, y1:0, x2:0.4, y2:1,
-            stop:0 {Colors.BG_DARK}, stop:1 {Colors.BG_MID});
+        background: {p.BG_DARK};
     }}
     QWidget {{
         font-family: {_CSS_FONT_STACK};
@@ -417,9 +427,9 @@ APP_STYLESHEET = f"""
 
     /* ── Tooltips ──────────────────────────────────────────────── */
     QToolTip {{
-        background: #2a2d3a;
-        color: {Colors.TEXT_PRIMARY};
-        border: 1px solid {Colors.BORDER};
+        background: {p.TOOLTIP_BG};
+        color: {p.TEXT_PRIMARY};
+        border: 1px solid {p.BORDER};
         border-radius: 4px;
         padding: 4px 8px;
         font-size: 11px;
@@ -427,38 +437,50 @@ APP_STYLESHEET = f"""
 
     /* ── Splitter handle ───────────────────────────────────────── */
     QSplitter::handle {{
-        background: {Colors.BORDER_SUBTLE};
+        background: {p.BORDER_SUBTLE};
     }}
     QSplitter::handle:hover {{
-        background: {Colors.ACCENT};
+        background: {a.ACCENT};
     }}
     QSplitter::handle:pressed {{
-        background: {Colors.ACCENT_LIGHT};
+        background: {a.ACCENT_LIGHT};
     }}
 
     /* ── Message boxes ─────────────────────────────────────────── */
     QMessageBox {{
-        background: #222233;
-        color: white;
+        background: {p.DIALOG_BG};
+        color: {p.TEXT_PRIMARY};
     }}
     QMessageBox QLabel {{
-        color: white;
+        color: {p.TEXT_PRIMARY};
     }}
     QMessageBox QPushButton {{
-        background: {Colors.SURFACE_RAISED};
-        border: 1px solid {Colors.BORDER};
+        background: {p.SURFACE_RAISED};
+        border: 1px solid {p.BORDER};
         border-radius: {Metrics.BORDER_RADIUS_SM}px;
-        color: white;
+        color: {p.TEXT_PRIMARY};
         padding: 6px 20px;
         min-width: 70px;
     }}
     QMessageBox QPushButton:hover {{
-        background: {Colors.SURFACE_HOVER};
+        background: {p.SURFACE_HOVER};
     }}
 
     /* ── Dialog ─────────────────────────────────────────────────── */
     QDialog {{
-        background: #222233;
-        color: white;
+        background: {p.DIALOG_BG};
+        color: {p.TEXT_PRIMARY};
+    }}
+
+    /* ── Focus ring ─────────────────────────────────────────────── */
+    QPushButton:focus {{
+        outline: none;
+        border: 1px solid {a.BORDER_FOCUS};
     }}
 """
+
+
+# Backwards compatibility: keep APP_STYLESHEET as a lazy property for any
+# import-time references, but it should not be used directly anymore.
+# New code should call build_app_stylesheet() or let ThemeManager handle it.
+APP_STYLESHEET = ""  # Placeholder — ThemeManager.apply_initial() sets the real one

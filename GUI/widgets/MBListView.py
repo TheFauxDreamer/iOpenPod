@@ -329,8 +329,8 @@ class MusicBrowserList(QFrame):
 
         t.setStyleSheet(f"""
             QTableWidget {{
-                background-color: rgba(0,0,0,20);
-                alternate-background-color: rgba(255,255,255,4);
+                background-color: {Colors.SURFACE};
+                alternate-background-color: {Colors.SURFACE_ALT};
                 border: none;
                 color: {Colors.TEXT_PRIMARY};
                 gridline-color: {Colors.GRIDLINE};
@@ -345,7 +345,7 @@ class MusicBrowserList(QFrame):
                 background-color: {Colors.SELECTION};
             }}
             QTableWidget::item:hover {{
-                background-color: rgba(255,255,255,6);
+                background-color: {Colors.SURFACE_HOVER};
             }}
             QHeaderView::section {{
                 background-color: {Colors.SURFACE_ALT};
@@ -393,6 +393,85 @@ class MusicBrowserList(QFrame):
             t.setMouseTracking(True)
 
         t.setSortingEnabled(True)
+
+    # -------------------------------------------------------------------------
+    # Colorful Album Background (iTunes 11 style)
+    # -------------------------------------------------------------------------
+
+    _default_table_css: str = ""  # Stored on first _setup_table call
+
+    def setDominantColor(self, r: int, g: int, b: int,
+                         text: tuple[int, int, int] | None = None,
+                         text_secondary: tuple[int, int, int] | None = None):
+        """Tint the track list background with an album's dominant color.
+
+        When active, the table gets a gradient background derived from
+        the album artwork and uses contrast-appropriate text colors
+        (iTunes 11 style).
+        """
+        # Darker shade for gradient stop
+        dr, dg, db = max(0, int(r * 0.3)), max(0, int(g * 0.3)), max(0, int(b * 0.3))
+
+        # Text colors: use provided or fall back to white/light-grey
+        if text:
+            tr, tg, tb = text
+        else:
+            tr, tg, tb = 255, 255, 255
+        if text_secondary:
+            sr, sg, sb = text_secondary
+        else:
+            sr, sg, sb = max(0, tr - 40), max(0, tg - 40), max(0, tb - 40)
+
+        txt_css = f"rgb({tr},{tg},{tb})"
+        txt2_css = f"rgb({sr},{sg},{sb})"
+
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba({r},{g},{b},45), stop:1 rgba({dr},{dg},{db},45));
+                alternate-background-color: rgba({r},{g},{b},20);
+                border: none;
+                color: {txt_css};
+                gridline-color: rgba({tr},{tg},{tb},20);
+                selection-background-color: rgba({tr},{tg},{tb},60);
+                outline: none;
+            }}
+            QTableWidget::item {{
+                padding: 6px 8px;
+                border-bottom: 1px solid rgba({tr},{tg},{tb},10);
+            }}
+            QTableWidget::item:selected {{
+                background-color: rgba({tr},{tg},{tb},60);
+            }}
+            QTableWidget::item:hover {{
+                background-color: rgba({tr},{tg},{tb},20);
+            }}
+            QHeaderView::section {{
+                background-color: rgba({r},{g},{b},30);
+                color: {txt2_css};
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 1px solid rgba({tr},{tg},{tb},15);
+                font-weight: 600;
+                font-size: 11px;
+            }}
+            QHeaderView::section:hover {{
+                background-color: rgba({r},{g},{b},50);
+                color: {txt_css};
+            }}
+            QHeaderView::section:pressed {{
+                background-color: rgba({r},{g},{b},60);
+            }}
+            QTableCornerButton::section {{
+                background-color: rgba({r},{g},{b},30);
+                border: none;
+                border-bottom: 1px solid rgba({tr},{tg},{tb},15);
+            }}
+        """)
+
+    def resetDominantColor(self):
+        """Remove the colorful tint and restore default table styling."""
+        self._setup_table()
 
     # -------------------------------------------------------------------------
     # Public API - Loading and Filtering
@@ -1230,7 +1309,7 @@ class MusicBrowserList(QFrame):
                 if regular:
                     for pl in regular:
                         title = pl.get("Title", "Untitled")
-                        act = add_menu.addAction(f"📋  {title}")
+                        act = add_menu.addAction(title)
                         if act:
                             act.triggered.connect(
                                 lambda _=False, p=pl: self._add_selected_to_playlist(p)

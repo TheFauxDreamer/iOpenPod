@@ -40,8 +40,13 @@ def _title_bar_css(r1: int, g1: int, b1: int, r2: int, g2: int, b2: int) -> str:
     """
 
 
-# Default blue gradient
-_DEFAULT_CSS = _title_bar_css(64, 156, 255, 40, 110, 200)
+def _default_css() -> str:
+    """Build the default accent-colored gradient CSS."""
+    from ..theme import ThemeManager
+    a = ThemeManager.instance().accent
+    r, g, b = a.rgb
+    dr, dg, db = a.dark_rgb
+    return _title_bar_css(r, g, b, dr, dg, db)
 
 
 class TrackListTitleBar(QFrame):
@@ -61,7 +66,7 @@ class TrackListTitleBar(QFrame):
         self.setMaximumHeight(34)
         self.setFixedHeight(34)
 
-        self.setStyleSheet(_DEFAULT_CSS)
+        self.setStyleSheet(_default_css())
 
         self.title = QLabel("Tracks")
         self.title.setFont(QFont(FONT_FAMILY, 12, QFont.Weight.DemiBold))
@@ -95,7 +100,7 @@ class TrackListTitleBar(QFrame):
 
     def resetColor(self):
         """Reset to the default blue gradient."""
-        self.setStyleSheet(_DEFAULT_CSS)
+        self.setStyleSheet(_default_css())
 
     def _toggleMinimize(self):
         """Minimize the track list panel."""

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QCursor, QRegularExpressionValidator
 from .formatters import format_size, format_duration_human as format_duration
-from ..ipod_images import get_ipod_image
+from ..ipod_images import get_ipod_image, get_ipod_image_by_name
 from ..styles import Colors, FONT_FAMILY, MONO_FONT_FAMILY, Metrics, btn_css, accent_btn_css
 
 
@@ -95,11 +95,12 @@ class DeviceInfoCard(QFrame):
     def __init__(self):
         super().__init__()
         self._rename_edit: QLineEdit | None = None
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
         self.setStyleSheet(f"""
             QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(64,156,255,60), stop:1 rgba(40,100,180,60));
-                border: 1px solid rgba(64,156,255,70);
+                background: {a.rgba(40)};
+                border: 1px solid {a.rgba(70)};
                 border-radius: {Metrics.BORDER_RADIUS_LG}px;
             }}
         """)
@@ -112,7 +113,7 @@ class DeviceInfoCard(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
 
-        self.icon_label = QLabel("🎵")
+        self.icon_label = QLabel("♪")
         self.icon_label.setFont(QFont(FONT_FAMILY, 24))
         self.icon_label.setFixedSize(52, 52)
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -144,7 +145,7 @@ class DeviceInfoCard(QFrame):
         # Separator
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: rgba(255,255,255,30); border: none;")
+        sep.setStyleSheet(f"background-color: {Colors.BORDER}; border: none;")
         layout.addWidget(sep)
 
         # Stats grid
@@ -236,13 +237,12 @@ class DeviceInfoCard(QFrame):
         self.storage_bar.setTextVisible(False)
         self.storage_bar.setStyleSheet(f"""
             QProgressBar {{
-                background-color: rgba(0,0,0,40);
+                background-color: {Colors.SURFACE_ACTIVE};
                 border: none;
                 border-radius: 2px;
             }}
             QProgressBar::chunk {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {Colors.ACCENT}, stop:1 {Colors.ACCENT_LIGHT});
+                background: {Colors.ACCENT};
                 border-radius: 2px;
             }}
         """)
@@ -262,7 +262,7 @@ class DeviceInfoCard(QFrame):
         self._rename_edit.setStyleSheet(f"""
             QLineEdit {{
                 color: {Colors.TEXT_PRIMARY};
-                background: rgba(0,0,0,60);
+                background: {Colors.SURFACE_ACTIVE};
                 border: 1px solid {Colors.ACCENT};
                 border-radius: 4px;
                 padding: 1px 4px;
@@ -317,23 +317,27 @@ class DeviceInfoCard(QFrame):
         self.name_label.setText(name or "No Device")
         self.model_label.setText(model)
 
-        # Try to load real product photo from centralized store
-        family = ""
-        generation = ""
-        color = ""
-        try:
-            from device_info import get_current_device
-            dev = get_current_device()
-            if dev:
-                family = dev.model_family or ""
-                generation = dev.generation or ""
-                color = dev.color or ""
-        except Exception:
-            pass
-        if not family and model:
-            family = model
+        # Check for a name-based custom image override first
+        photo = get_ipod_image_by_name(name, 48) if name else None
 
-        photo = get_ipod_image(family, generation, 48, color) if family else None
+        if not photo:
+            # Try to load real product photo from centralized store
+            family = ""
+            generation = ""
+            color = ""
+            try:
+                from device_info import get_current_device
+                dev = get_current_device()
+                if dev:
+                    family = dev.model_family or ""
+                    generation = dev.generation or ""
+                    color = dev.color or ""
+            except Exception:
+                pass
+            if not family and model:
+                family = model
+            photo = get_ipod_image(family, generation, 48, color) if family else None
+
         if photo and not photo.isNull():
             self.icon_label.setPixmap(photo)
             self.icon_label.setFont(QFont())  # Clear emoji font
@@ -341,17 +345,17 @@ class DeviceInfoCard(QFrame):
             # Fallback to emoji
             model_lower = model.lower() if model else ""
             if "classic" in model_lower:
-                self.icon_label.setText("📱")
+                self.icon_label.setText("♪")
             elif "nano" in model_lower:
-                self.icon_label.setText("🎵")
+                self.icon_label.setText("♪")
             elif "shuffle" in model_lower:
-                self.icon_label.setText("🔀")
+                self.icon_label.setText("♪")
             elif "mini" in model_lower:
-                self.icon_label.setText("🎶")
+                self.icon_label.setText("♪")
             elif "video" in model_lower or "photo" in model_lower:
-                self.icon_label.setText("📱")
+                self.icon_label.setText("♪")
             else:
-                self.icon_label.setText("🎵")
+                self.icon_label.setText("♪")
             self.icon_label.setFont(QFont(FONT_FAMILY, 24))
 
         # Update technical details from centralized store
@@ -466,8 +470,8 @@ class Sidebar(QFrame):
         self.deviceSelectLayout.setContentsMargins(0, 0, 0, 0)
         self.deviceSelectLayout.setSpacing(6)
 
-        self.deviceButton = QPushButton("📂 Select")
-        self.rescanButton = QPushButton("🔃 Rescan")
+        self.deviceButton = QPushButton("▸ Select")
+        self.rescanButton = QPushButton("↻ Rescan")
 
         button_style = btn_css(
             bg=Colors.SURFACE_RAISED,
@@ -486,13 +490,13 @@ class Sidebar(QFrame):
         self.sidebarLayout.addLayout(self.deviceSelectLayout)
 
         # Sync button - row 2 (full width)
-        self.syncButton = QPushButton("🔄 Sync with PC")
+        self.syncButton = QPushButton("⇄ Sync with PC")
         self.syncButton.setStyleSheet(accent_btn_css())
         self.syncButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self.sidebarLayout.addWidget(self.syncButton)
 
         # Backup button
-        self.backupButton = QPushButton("💾 Backups")
+        self.backupButton = QPushButton("⬡ Backups")
         self.backupButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self.backupButton.setStyleSheet(btn_css(
             bg=Colors.SURFACE_ALT,
@@ -539,7 +543,7 @@ class Sidebar(QFrame):
         self.sidebarLayout.addStretch()
 
         # Settings button at bottom
-        self.settingsButton = QPushButton("⚙ Settings")
+        self.settingsButton = QPushButton("⚙ Settings")  # ⚙ is a consistent Unicode symbol
         self.settingsButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self.settingsButton.setStyleSheet(btn_css(
             bg="transparent",
@@ -570,7 +574,7 @@ class Sidebar(QFrame):
 
     def updateDeviceButton(self, device_name: str):
         """Update the device button text to show selected device."""
-        self.deviceButton.setText("📂 Device")
+        self.deviceButton.setText("▸ Device")
 
     def selectCategory(self, category):
         # Reset the previous selected button's style
@@ -585,10 +589,12 @@ class Sidebar(QFrame):
 
         self.selectedCategory = category
         # set the selected button's style
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
         self.buttons[self.selectedCategory].setStyleSheet(btn_css(
             bg=Colors.ACCENT,
-            bg_hover="rgba(64,156,255,200)",
-            bg_press="rgba(64,156,255,160)",
+            bg_hover=a.rgba(200),
+            bg_press=a.rgba(160),
             radius=Metrics.BORDER_RADIUS_SM,
             padding="9px 12px",
             extra="text-align: left;",

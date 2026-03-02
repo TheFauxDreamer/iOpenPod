@@ -107,6 +107,15 @@ class AppSettings:
     # Show album art in the track list view
     show_art_in_tracklist: bool = True
 
+    # Theme mode: "dark", "light", or "system" (match OS preference)
+    theme_mode: str = "dark"
+
+    # Accent color preset name (blue, red, green, orange, purple, cyan, pink)
+    accent_color: str = "blue"
+
+    # Tint album track list with dominant color from artwork (iTunes 11 style)
+    colorful_albums: bool = True
+
     # ── Backups ─────────────────────────────────────────────────────────────
     # Custom backup directory (empty = ~/iOpenPod_Backups/).
     backup_dir: str = ""

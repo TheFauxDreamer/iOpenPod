@@ -45,10 +45,10 @@ from .trackListTitleBar import TrackListTitleBar
 log = logging.getLogger(__name__)
 
 # Icons for each playlist type
-_ICON_REGULAR = "📋"
-_ICON_SMART = "🧠"
-_ICON_PODCAST = "🎙"
-_ICON_MASTER = "📚"
+_ICON_REGULAR = "≡"
+_ICON_SMART = "◇"
+_ICON_PODCAST = "◎"
+_ICON_MASTER = "▤"
 
 
 # =============================================================================
@@ -106,7 +106,7 @@ class PlaylistInfoCard(QFrame):
         self.edit_btn.hide()
         btn_row.addWidget(self.edit_btn)
 
-        self.delete_btn = QPushButton("🗑 Delete")
+        self.delete_btn = QPushButton("Delete")
         self.delete_btn.setFont(QFont(FONT_FAMILY, 9))
         self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.delete_btn.setStyleSheet(btn_css(
@@ -679,10 +679,12 @@ class PlaylistListPanel(QFrame):
 
         # Highlight new selection
         btn = self._buttons[index]
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
         btn.setStyleSheet(btn_css(
             bg=Colors.ACCENT,
-            bg_hover="rgba(64,156,255,200)",
-            bg_press="rgba(64,156,255,160)",
+            bg_hover=a.rgba(200),
+            bg_press=a.rgba(160),
             radius=Metrics.BORDER_RADIUS_SM,
             padding="7px 8px",
             extra="text-align: left;",

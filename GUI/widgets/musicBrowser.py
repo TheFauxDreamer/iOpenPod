@@ -140,6 +140,7 @@ class MusicBrowser(QFrame):
             self.browserTrack.loadTracks()
             self.trackListTitleBar.setTitle("All Tracks")
             self.trackListTitleBar.resetColor()
+            self.browserTrack.resetDominantColor()
         elif category == "Playlists":
             log.debug("  Showing Playlists view")
             self.stack.setCurrentIndex(1)
@@ -154,6 +155,7 @@ class MusicBrowser(QFrame):
             self.browserTrack.clearFilter()
             self.trackListTitleBar.setTitle(f"Select a{'n' if category[0] in 'AE' else ''} {category[:-1]}")
             self.trackListTitleBar.resetColor()
+            self.browserTrack.resetDominantColor()
 
     def _onGridItemSelected(self, item_data: dict):
         """Handle when a grid item is clicked."""
@@ -163,14 +165,23 @@ class MusicBrowser(QFrame):
         filter_key = item_data.get("filter_key")
         filter_value = item_data.get("filter_value")
 
-        # Update title bar with album color
+        # Update title bar and track list with album color (iTunes 11 style)
         self.trackListTitleBar.setTitle(title)
         dominant_color = item_data.get("dominant_color")
-        if dominant_color:
+        album_colors = item_data.get("album_colors")
+
+        from ..settings import get_settings
+        colorful = get_settings().colorful_albums
+
+        if dominant_color and colorful:
             r, g, b = dominant_color
             self.trackListTitleBar.setColor(r, g, b)
+            text = album_colors.get("text") if album_colors else None
+            text_sec = album_colors.get("text_secondary") if album_colors else None
+            self.browserTrack.setDominantColor(r, g, b, text=text, text_secondary=text_sec)
         else:
             self.trackListTitleBar.resetColor()
+            self.browserTrack.resetDominantColor()
 
         # Apply filter to track list
         if filter_key and filter_value:

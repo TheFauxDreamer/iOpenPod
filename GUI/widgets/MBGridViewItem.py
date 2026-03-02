@@ -38,7 +38,7 @@ class MusicBrowserGridItem(QFrame):
         self.img_label.setFixedSize(QSize(Metrics.GRID_ART_SIZE, Metrics.GRID_ART_SIZE))
         self.img_label.setStyleSheet(f"""
             border: none;
-            background: rgba(0,0,0,25);
+            background: {Colors.SURFACE_HOVER};
             border-radius: {Metrics.BORDER_RADIUS}px;
         """)
         self.gridItemLayout.addWidget(self.img_label)
@@ -70,7 +70,7 @@ class MusicBrowserGridItem(QFrame):
                 background-color: {Colors.SURFACE_ALT};
                 border: 1px solid {Colors.BORDER_SUBTLE};
                 border-radius: {Metrics.BORDER_RADIUS_XL}px;
-                color: white;
+                color: {Colors.TEXT_PRIMARY};
             }}
             QFrame:hover {{
                 background-color: {Colors.SURFACE_HOVER};
@@ -80,13 +80,15 @@ class MusicBrowserGridItem(QFrame):
 
     def _setPlaceholderImage(self):
         """Set a placeholder when no artwork is available."""
-        self.img_label.setText("🎵")
+        self.img_label.setText("♪")
         self.img_label.setFont(QFont(FONT_FAMILY, 40))
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
         self.img_label.setStyleSheet(f"""
             border: none;
-            background: rgba(64,156,255,35);
+            background: {a.rgba(35)};
             border-radius: {Metrics.BORDER_RADIUS}px;
-            color: rgba(255,255,255,80);
+            color: {Colors.TEXT_TERTIARY};
         """)
 
     def mousePressEvent(self, a0):
@@ -156,7 +158,17 @@ class MusicBrowserGridItem(QFrame):
             return {"error": True, "mhiiLink": mhiiLink}
 
         pil_image, dcol = result
-        return {"pil_image": pil_image, "dcol": dcol}
+
+        # Compute full album colors (bg + text) in the worker thread
+        album_colors = None
+        if pil_image and dcol:
+            try:
+                from ..imgMaker import getAlbumColors
+                album_colors = getAlbumColors(pil_image)
+            except Exception:
+                pass
+
+        return {"pil_image": pil_image, "dcol": dcol, "album_colors": album_colors}
 
     def _applyImage(self, result):
         """Apply loaded image data on main thread."""
@@ -213,9 +225,12 @@ class MusicBrowserGridItem(QFrame):
                 border-radius: {Metrics.BORDER_RADIUS}px;
             """)
 
-            # Store dominant color in item_data for downstream use
+            # Store dominant color and full album colors for downstream use
             if dcol:
                 self.item_data["dominant_color"] = dcol
+                album_colors = result.get("album_colors")
+                if album_colors:
+                    self.item_data["album_colors"] = album_colors
 
             # Tint background with dominant color
             if dcol:

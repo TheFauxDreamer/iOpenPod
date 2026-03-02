@@ -77,8 +77,8 @@ class ToggleRow(SettingRow):
                 width: 38px;
                 height: 20px;
                 border-radius: 10px;
-                background: rgba(255,255,255,30);
-                border: 1px solid rgba(255,255,255,40);
+                background: {Colors.SURFACE_ACTIVE};
+                border: 1px solid {Colors.BORDER};
             }}
             QCheckBox::indicator:checked {{
                 background: {Colors.ACCENT};
@@ -114,7 +114,7 @@ class ComboRow(SettingRow):
                 background: {Colors.SURFACE_RAISED};
                 border: 1px solid {Colors.BORDER};
                 border-radius: {Metrics.BORDER_RADIUS_SM}px;
-                color: white;
+                color: {Colors.TEXT_PRIMARY};
                 padding: 5px 10px;
             }}
             QComboBox:hover {{
@@ -129,8 +129,8 @@ class ComboRow(SettingRow):
                 border: none;
             }}
             QComboBox QAbstractItemView {{
-                background: #2a2a3a;
-                color: white;
+                background: {Colors.MENU_BG};
+                color: {Colors.TEXT_PRIMARY};
                 selection-background-color: {Colors.ACCENT};
                 border: 1px solid {Colors.BORDER};
                 border-radius: 4px;
@@ -381,6 +381,64 @@ class ToolRow(SettingRow):
         self.status_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
 
 
+class AccentPickerRow(SettingRow):
+    """Setting row with a row of colored circles for accent color selection."""
+
+    changed = pyqtSignal(str)
+
+    def __init__(self, title: str, description: str = "", current: str = "blue"):
+        super().__init__(title, description)
+        from ..theme import ACCENT_PRESETS
+
+        container = QWidget()
+        container.setStyleSheet("background: transparent; border: none;")
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        self._dots: dict[str, QPushButton] = {}
+        for name, hex_color in ACCENT_PRESETS.items():
+            dot = QPushButton()
+            dot.setFixedSize(24, 24)
+            dot.setCursor(Qt.CursorShape.PointingHandCursor)
+            dot.setToolTip(name.capitalize())
+            dot.clicked.connect(lambda checked=False, n=name: self._pick(n))
+            self._dots[name] = dot
+            row.addWidget(dot)
+
+        self._current = current
+        self._restyle()
+        self.add_control(container)
+
+    def _restyle(self):
+        from ..theme import ACCENT_PRESETS
+        for name, dot in self._dots.items():
+            hex_c = ACCENT_PRESETS[name]
+            selected = name == self._current
+            ring = f"border: 2px solid {Colors.TEXT_PRIMARY};" if selected else f"border: 2px solid transparent;"
+            dot.setStyleSheet(f"""
+                QPushButton {{
+                    background: {hex_c};
+                    border-radius: 12px;
+                    {ring}
+                }}
+                QPushButton:hover {{
+                    border: 2px solid {Colors.TEXT_SECONDARY};
+                }}
+            """)
+
+    def _pick(self, name: str):
+        if name == self._current:
+            return
+        self._current = name
+        self._restyle()
+        self.changed.emit(name)
+
+    @property
+    def value(self) -> str:
+        return self._current
+
+
 # ── Main settings page ─────────────────────────────────────────────────────
 
 class SettingsPage(QWidget):
@@ -522,6 +580,28 @@ class SettingsPage(QWidget):
         # ── APPEARANCE section ──────────────────────────────────────────────
         layout.addWidget(self._section_label("APPEARANCE"))
 
+        self.theme_mode = ComboRow(
+            "Theme",
+            "Choose dark, light, or follow your system preference.",
+            options=["Dark", "Light", "System"],
+            current="Dark",
+        )
+        layout.addWidget(self.theme_mode)
+
+        self.accent_color = AccentPickerRow(
+            "Accent Color",
+            "Highlight color used throughout the interface.",
+            current="blue",
+        )
+        layout.addWidget(self.accent_color)
+
+        self.colorful_albums = ToggleRow(
+            "Colorful Albums",
+            "Tint the track list with the album artwork's dominant color (iTunes 11 style).",
+            checked=True,
+        )
+        layout.addWidget(self.colorful_albums)
+
         self.show_art = ToggleRow(
             "Track List Artwork",
             "Show album art thumbnails next to tracks in the list view.",
@@ -607,6 +687,7 @@ class SettingsPage(QWidget):
         self.music_folder.value = s.music_folder
         self.write_back.value = s.write_back_to_pc
         self.show_art.value = s.show_art_in_tracklist
+        self.colorful_albums.value = s.colorful_albums
         self.transcode_cache_dir.value = s.transcode_cache_dir
         self.settings_dir.value = s.settings_dir
         self.ffmpeg_path.value = s.ffmpeg_path
@@ -614,6 +695,16 @@ class SettingsPage(QWidget):
 
         self.backup_dir.value = s.backup_dir
         self.backup_before_sync.value = s.backup_before_sync
+
+        # Theme mode
+        mode_map = {"dark": "Dark", "light": "Light", "system": "System"}
+        idx = self.theme_mode.combo.findText(mode_map.get(s.theme_mode, "Dark"))
+        if idx >= 0:
+            self.theme_mode.combo.setCurrentIndex(idx)
+
+        # Accent color
+        self.accent_color._current = s.accent_color
+        self.accent_color._restyle()
 
         # Refresh tool status indicators
         self._refresh_tool_status()
@@ -655,6 +746,9 @@ class SettingsPage(QWidget):
             self.transcode_timeout.changed.connect(self._save)
             self.sync_workers.changed.connect(self._save)
             self.show_art.changed.connect(self._save)
+            self.colorful_albums.changed.connect(self._save)
+            self.theme_mode.changed.connect(self._on_theme_changed)
+            self.accent_color.changed.connect(self._on_accent_changed)
             self.transcode_cache_dir.changed.connect(self._save)
             self.settings_dir.changed.connect(self._save)
             self.ffmpeg_path.changed.connect(self._save_and_refresh_tools)
@@ -671,12 +765,20 @@ class SettingsPage(QWidget):
         s.music_folder = self.music_folder.value
         s.write_back_to_pc = self.write_back.value
         s.show_art_in_tracklist = self.show_art.value
+        s.colorful_albums = self.colorful_albums.value
         s.transcode_cache_dir = self.transcode_cache_dir.value
         s.settings_dir = self.settings_dir.value
         s.ffmpeg_path = self.ffmpeg_path.value
         s.fpcalc_path = self.fpcalc_path.value
         s.backup_dir = self.backup_dir.value
         s.backup_before_sync = self.backup_before_sync.value
+
+        # Theme mode
+        mode_rmap = {"Dark": "dark", "Light": "light", "System": "system"}
+        s.theme_mode = mode_rmap.get(self.theme_mode.value, "dark")
+
+        # Accent color
+        s.accent_color = self.accent_color.value
 
         # Parse max backups
         mb_text = self.max_backups.value
@@ -702,6 +804,19 @@ class SettingsPage(QWidget):
         self.transcode_cache_dir.value = ""
         self.settings_dir.value = ""
         self.backup_dir.value = ""
+        self._save()
+
+    def _on_theme_changed(self, text: str):
+        """Apply the selected theme mode immediately."""
+        from ..theme import ThemeManager
+        mode_rmap = {"Dark": "dark", "Light": "light", "System": "system"}
+        ThemeManager.instance().set_mode(mode_rmap.get(text, "dark"))
+        self._save()
+
+    def _on_accent_changed(self, name: str):
+        """Apply the selected accent color immediately."""
+        from ..theme import ThemeManager
+        ThemeManager.instance().set_accent(name)
         self._save()
 
     def _on_close(self):

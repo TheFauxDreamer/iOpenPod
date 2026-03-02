@@ -22,6 +22,31 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _IMAGE_DIR = _PROJECT_ROOT / "assets" / "ipod_images"
 
 
+# Custom image overrides keyed by iPod name (case-insensitive).
+_NAME_OVERRIDES: dict[str, str] = {
+    "ishtar": "Classic-5-Clear.png",
+}
+
+
+@lru_cache(maxsize=128)
+def get_ipod_image_by_name(name: str, size: int = 80) -> QPixmap | None:
+    """Return a custom image override for a specific iPod name, or None."""
+    filename = _NAME_OVERRIDES.get(name.lower().strip())
+    if not filename:
+        return None
+    path = _IMAGE_DIR / filename
+    if not path.exists():
+        return None
+    pixmap = QPixmap(str(path))
+    if pixmap.isNull():
+        return None
+    return pixmap.scaled(
+        size, size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
+
 @lru_cache(maxsize=128)
 def get_ipod_image(
     family: str,

@@ -41,8 +41,8 @@ class _MissingToolsDialog(QDialog):
         self.setFixedWidth(420)
         self.setStyleSheet(f"""
             QDialog {{
-                background: #222233;
-                color: white;
+                background: {Colors.DIALOG_BG};
+                color: {Colors.TEXT_PRIMARY};
             }}
         """)
 
@@ -169,8 +169,8 @@ class _DownloadProgressDialog(QDialog):
         )
         self.setStyleSheet(f"""
             QDialog {{
-                background: #222233;
-                color: white;
+                background: {Colors.DIALOG_BG};
+                color: {Colors.TEXT_PRIMARY};
             }}
         """)
 
@@ -733,11 +733,11 @@ class iTunesDBCache(QObject):
 
 
 category_glyphs = {
-    "Albums": "💿",
-    "Artists": "🧑‍🎤",
-    "Tracks": "🎵",
-    "Playlists": "📂",
-    "Genres": "📜"}
+    "Albums": "◉",
+    "Artists": "♫",
+    "Tracks": "♪",
+    "Playlists": "☰",
+    "Genres": "◈"}
 
 
 class Worker(QRunnable):

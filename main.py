@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import traceback
-from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from GUI.app import MainWindow
 
@@ -89,32 +88,22 @@ def run_pyqt_app():
     from GUI.fonts import load_bundled_fonts
     load_bundled_fonts()
 
-    # Use custom proxy style for dark scrollbars (CSS scrollbar styling is
+    # Use custom proxy style for scrollbars (CSS scrollbar styling is
     # unreliable on Windows with Fusion — this paints them directly).
     from GUI.styles import DarkScrollbarStyle
     app.setStyle(DarkScrollbarStyle("Fusion"))
 
-    # Set a dark palette so Fusion's fallback colors aren't bright grey/blue
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(26, 26, 46))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.Base, QColor(22, 22, 36))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(30, 30, 48))
-    palette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.Button, QColor(30, 30, 48))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(64, 156, 255))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-    palette.setColor(QPalette.ColorRole.Mid, QColor(30, 30, 48))
-    palette.setColor(QPalette.ColorRole.Dark, QColor(18, 18, 30))
-    palette.setColor(QPalette.ColorRole.Midlight, QColor(40, 40, 60))
-    palette.setColor(QPalette.ColorRole.Shadow, QColor(0, 0, 0))
-    palette.setColor(QPalette.ColorRole.Light, QColor(50, 50, 70))
-    app.setPalette(palette)
+    # Initialize ThemeManager with saved settings, then apply palette +
+    # stylesheet in one shot.  This replaces the old hardcoded QPalette
+    # and APP_STYLESHEET constant.
+    from GUI.theme import ThemeManager
+    from GUI.settings import get_settings
 
-    # Apply global stylesheet
-    from GUI.styles import APP_STYLESHEET
-    app.setStyleSheet(APP_STYLESHEET)
+    settings = get_settings()
+    tm = ThemeManager.instance()
+    tm.set_accent(settings.accent_color)
+    tm.set_mode(settings.theme_mode)
+    tm.apply_initial()
 
     window = MainWindow()
 

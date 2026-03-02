@@ -15,8 +15,13 @@ from PyQt6.QtWidgets import (
 
 from device_info import DeviceInfo
 from ..device_scanner import scan_for_ipods
-from ..ipod_images import get_ipod_image
+from ..ipod_images import get_ipod_image, get_ipod_image_by_name
 from ..styles import Colors, FONT_FAMILY, Metrics, btn_css
+from ..theme import ThemeManager
+
+
+def _accent():
+    return ThemeManager.instance().accent
 
 
 class _ScanThread(QThread):
@@ -218,7 +223,9 @@ class DeviceCard(QFrame):
         icon_label = QLabel()
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setStyleSheet("background: transparent; border: none;")
-        photo = get_ipod_image(ipod.model_family, ipod.generation, 80, ipod.color)
+        photo = get_ipod_image_by_name(ipod.ipod_name or "", 80)
+        if not photo:
+            photo = get_ipod_image(ipod.model_family, ipod.generation, 80, ipod.color)
         if photo and not photo.isNull():
             icon_label.setPixmap(photo)
         else:
@@ -251,8 +258,7 @@ class DeviceCard(QFrame):
         if self._selected:
             self.setStyleSheet(f"""
                 DeviceCard {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(64,156,255,100), stop:1 rgba(40,100,200,100));
+                    background: {_accent().rgba(60)};
                     border: 2px solid {Colors.ACCENT};
                     border-radius: {Metrics.BORDER_RADIUS_XL}px;
                 }}
@@ -380,7 +386,7 @@ class DevicePickerDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
 
-        self._manual_btn = QPushButton("📁  Browse Manually...")
+        self._manual_btn = QPushButton("Browse Manually...")
         self._manual_btn.setFont(QFont(FONT_FAMILY, 10))
         self._manual_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._manual_btn.setStyleSheet(btn_css(
@@ -394,7 +400,7 @@ class DevicePickerDialog(QDialog):
         self._manual_btn.clicked.connect(self._browse_manually)
         btn_layout.addWidget(self._manual_btn)
 
-        self._rescan_btn = QPushButton("🔃  Rescan")
+        self._rescan_btn = QPushButton("Rescan")
         self._rescan_btn.setFont(QFont(FONT_FAMILY, 10))
         self._rescan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._rescan_btn.setStyleSheet(btn_css(

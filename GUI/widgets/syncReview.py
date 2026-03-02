@@ -226,7 +226,7 @@ class SyncTrackRow(QFrame):
                 padding: 0;
             }}
             SyncTrackRow:hover {{
-                background: rgba(255,255,255,5);
+                background: {Colors.SURFACE};
             }}
         """)
         self.setCursor(Qt.CursorShape.PointingHandCursor if checkable else Qt.CursorShape.ArrowCursor)
@@ -242,7 +242,7 @@ class SyncTrackRow(QFrame):
         self.cb.setStyleSheet(f"""
             QCheckBox::indicator {{
                 width: 16px; height: 16px;
-                border: 2px solid rgba(255,255,255,60);
+                border: 2px solid {Colors.BORDER};
                 border-radius: 3px;
                 background: transparent;
             }}
@@ -463,7 +463,7 @@ class SyncCategoryCard(QFrame):
 
         self.setStyleSheet(f"""
             SyncCategoryCard {{
-                background: rgba(255,255,255,4);
+                background: {Colors.SURFACE};
                 border: 1px solid {Colors.BORDER_SUBTLE};
                 border-left: 3px solid {accent};
                 border-radius: {Metrics.BORDER_RADIUS}px;
@@ -489,7 +489,7 @@ class SyncCategoryCard(QFrame):
         self._select_all_cb.setStyleSheet(f"""
             QCheckBox::indicator {{
                 width: 16px; height: 16px;
-                border: 2px solid rgba(255,255,255,60);
+                border: 2px solid {Colors.BORDER};
                 border-radius: 3px;
                 background: transparent;
             }}
@@ -688,14 +688,14 @@ class SyncReviewWidget(QWidget):
         header = QFrame(self)
         header.setStyleSheet(f"""
             QFrame {{
-                background: rgba(30, 30, 38, 220);
+                background: rgba(30, 30, 30, 220);
                 border-bottom: 1px solid {Colors.BORDER};
             }}
         """)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(16, 12, 16, 12)
 
-        title = QLabel("🔄 Sync Review", header)
+        title = QLabel("Sync Review", header)
         title.setFont(QFont(FONT_FAMILY, 14, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
         header_layout.addWidget(title)
@@ -727,7 +727,7 @@ class SyncReviewWidget(QWidget):
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
-                background: rgba(255,255,255,15);
+                background: {Colors.SURFACE_RAISED};
                 border: none;
                 border-radius: 4px;
                 height: 6px;
@@ -774,7 +774,7 @@ class SyncReviewWidget(QWidget):
         self._stats_bar = QFrame(content_widget)
         self._stats_bar.setStyleSheet(f"""
             QFrame {{
-                background: rgba(255,255,255,4);
+                background: {Colors.SURFACE};
                 border-bottom: 1px solid {Colors.BORDER_SUBTLE};
             }}
         """)
@@ -790,7 +790,7 @@ class SyncReviewWidget(QWidget):
         self._storage_frame = QFrame(content_widget)
         self._storage_frame.setStyleSheet(f"""
             QFrame {{
-                background: rgba(255,255,255,4);
+                background: {Colors.SURFACE};
                 border-bottom: 1px solid {Colors.BORDER_SUBTLE};
             }}
         """)
@@ -808,7 +808,7 @@ class SyncReviewWidget(QWidget):
         self._storage_bar.setTextVisible(False)
         self._storage_bar.setStyleSheet(f"""
             QProgressBar {{
-                background: rgba(255,255,255,15);
+                background: {Colors.SURFACE_RAISED};
                 border: none;
                 border-radius: 4px;
             }}
@@ -842,12 +842,12 @@ class SyncReviewWidget(QWidget):
                 width: 8px;
             }}
             QScrollBar::handle:vertical {{
-                background: rgba(255,255,255,50);
+                background: {Colors.SURFACE_ACTIVE};
                 border-radius: 4px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: rgba(255,255,255,80);
+                background: {Colors.SURFACE_ACTIVE};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
@@ -923,7 +923,7 @@ class SyncReviewWidget(QWidget):
         presync_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         presync_layout.setSpacing(16)
 
-        self._presync_icon = QLabel("💾", presync_widget)
+        self._presync_icon = QLabel("⬡", presync_widget)
         self._presync_icon.setFont(QFont(FONT_FAMILY, 48))
         self._presync_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         presync_layout.addWidget(self._presync_icon)
@@ -996,7 +996,7 @@ class SyncReviewWidget(QWidget):
         footer = QFrame(self)
         footer.setStyleSheet(f"""
             QFrame {{
-                background: rgba(30, 30, 38, 220);
+                background: rgba(30, 30, 30, 220);
                 border-top: 1px solid {Colors.BORDER};
             }}
         """)
@@ -1075,7 +1075,7 @@ class SyncReviewWidget(QWidget):
                 background: {Colors.ACCENT_LIGHT};
             }}
             QPushButton:disabled {{
-                background: rgba(64, 156, 255, 40);
+                background: {Colors.ACCENT_PRESS};
                 color: {Colors.TEXT_DISABLED};
             }}
         """)
@@ -1202,7 +1202,7 @@ class SyncReviewWidget(QWidget):
             ir = plan.integrity_report
             if ir and not ir.is_clean:
                 fixes = len(ir.missing_files) + len(ir.stale_mappings) + len(ir.orphan_files)
-                stats += f" · <span style='color: #64b4e6;'>🔧 {fixes} integrity fixes applied</span>"
+                stats += f" · <span style='color: #64b4e6;'>{fixes} integrity fixes applied</span>"
             self.summary_label.setText(stats)
             self.summary_label.setTextFormat(Qt.TextFormat.RichText)
             self.empty_stats.setText(stats)
@@ -1226,19 +1226,19 @@ class SyncReviewWidget(QWidget):
             stats_lay.insertWidget(stats_lay.count() - 1, pill)  # before stretch
 
         if plan.to_add:
-            _add_pill(f"📥 {len(plan.to_add)} add", _CAT_COLORS["add"])
+            _add_pill(f"+ {len(plan.to_add)} add", _CAT_COLORS["add"])
         if plan.to_remove:
-            _add_pill(f"🗑️ {len(plan.to_remove)} remove", _CAT_COLORS["remove"])
+            _add_pill(f"− {len(plan.to_remove)} remove", _CAT_COLORS["remove"])
         if plan.to_update_file:
-            _add_pill(f"🔄 {len(plan.to_update_file)} re-sync", _CAT_COLORS["update_file"])
+            _add_pill(f"↻ {len(plan.to_update_file)} re-sync", _CAT_COLORS["update_file"])
         if plan.to_update_metadata:
-            _add_pill(f"📝 {len(plan.to_update_metadata)} metadata", _CAT_COLORS["metadata"])
+            _add_pill(f"✎ {len(plan.to_update_metadata)} metadata", _CAT_COLORS["metadata"])
         if plan.to_update_artwork:
-            _add_pill(f"🎨 {len(plan.to_update_artwork)} artwork", _CAT_COLORS["artwork"])
+            _add_pill(f"◈ {len(plan.to_update_artwork)} artwork", _CAT_COLORS["artwork"])
         if plan.to_sync_playcount:
-            _add_pill(f"🎵 {len(plan.to_sync_playcount)} plays", _CAT_COLORS["playcount"])
+            _add_pill(f"♪ {len(plan.to_sync_playcount)} plays", _CAT_COLORS["playcount"])
         if plan.to_sync_rating:
-            _add_pill(f"⭐ {len(plan.to_sync_rating)} ratings", _CAT_COLORS["rating"])
+            _add_pill(f"★ {len(plan.to_sync_rating)} ratings", _CAT_COLORS["rating"])
 
         # Net size pill
         if plan.storage.bytes_to_add or plan.storage.bytes_to_remove:
@@ -1277,7 +1277,7 @@ class SyncReviewWidget(QWidget):
         ir = plan.integrity_report
         if ir and not ir.is_clean:
             fix_count = len(ir.missing_files) + len(ir.stale_mappings) + len(ir.orphan_files)
-            card = SyncCategoryCard("🔧", "Integrity Fixes (auto-repaired)", fix_count,
+            card = SyncCategoryCard("⚙", "Integrity Fixes (auto-repaired)", fix_count,
                                     _CAT_COLORS["integrity"], checkable=False, start_expanded=False,
                                     parent=self._cards_container)
             for t in ir.missing_files:
@@ -1293,7 +1293,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Add to iPod ─────────────────────────────────────────────
         if plan.to_add:
-            card = SyncCategoryCard("📥", "Add to iPod", len(plan.to_add),
+            card = SyncCategoryCard("+", "Add to iPod", len(plan.to_add),
                                     _CAT_COLORS["add"], size_bytes=plan.storage.bytes_to_add,
                                     subtitle="New tracks found on PC — will be copied to iPod",
                                     parent=self._cards_container)
@@ -1305,7 +1305,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Remove from iPod ────────────────────────────────────────
         if plan.to_remove:
-            card = SyncCategoryCard("🗑️", "Remove from iPod", len(plan.to_remove),
+            card = SyncCategoryCard("−", "Remove from iPod", len(plan.to_remove),
                                     _CAT_COLORS["remove"], size_bytes=-plan.storage.bytes_to_remove,
                                     subtitle="No longer in PC library — will be deleted from iPod",
                                     parent=self._cards_container)
@@ -1317,7 +1317,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Re-sync changed files ───────────────────────────────────
         if plan.to_update_file:
-            card = SyncCategoryCard("🔄", "Re-sync Changed Files", len(plan.to_update_file),
+            card = SyncCategoryCard("↻", "Re-sync Changed Files", len(plan.to_update_file),
                                     _CAT_COLORS["update_file"], size_bytes=plan.storage.bytes_to_update,
                                     subtitle="Audio file changed on PC — will be re-copied to iPod",
                                     parent=self._cards_container)
@@ -1329,7 +1329,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Update metadata ─────────────────────────────────────────
         if plan.to_update_metadata:
-            card = SyncCategoryCard("📝", "Update Metadata", len(plan.to_update_metadata),
+            card = SyncCategoryCard("✎", "Update Metadata", len(plan.to_update_metadata),
                                     _CAT_COLORS["metadata"], start_expanded=False,
                                     subtitle="Tags changed on PC — title, artist, etc. updated without re-copying",
                                     parent=self._cards_container)
@@ -1341,7 +1341,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Update artwork ──────────────────────────────────────────
         if plan.to_update_artwork:
-            card = SyncCategoryCard("🎨", "Update Artwork", len(plan.to_update_artwork),
+            card = SyncCategoryCard("◈", "Update Artwork", len(plan.to_update_artwork),
                                     _CAT_COLORS["artwork"], start_expanded=False,
                                     subtitle="Album art changed on PC — will be re-extracted",
                                     parent=self._cards_container)
@@ -1353,7 +1353,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Sync play counts ────────────────────────────────────────
         if plan.to_sync_playcount:
-            card = SyncCategoryCard("🎵", "Sync Play Counts", len(plan.to_sync_playcount),
+            card = SyncCategoryCard("♪", "Sync Play Counts", len(plan.to_sync_playcount),
                                     _CAT_COLORS["playcount"], start_expanded=False,
                                     subtitle="New plays on iPod — will be written back to PC files",
                                     parent=self._cards_container)
@@ -1365,7 +1365,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Sync ratings ────────────────────────────────────────────
         if plan.to_sync_rating:
-            card = SyncCategoryCard("⭐", "Sync Ratings", len(plan.to_sync_rating),
+            card = SyncCategoryCard("★", "Sync Ratings", len(plan.to_sync_rating),
                                     _CAT_COLORS["rating"], start_expanded=False,
                                     subtitle="Rating differs between PC and iPod — most recent wins",
                                     parent=self._cards_container)
@@ -1378,7 +1378,7 @@ class SyncReviewWidget(QWidget):
         # ── Playlist changes ────────────────────────────────────────
         pl_total = len(plan.playlists_to_add) + len(plan.playlists_to_edit) + len(plan.playlists_to_remove)
         if pl_total:
-            card = SyncCategoryCard("🎶", "Playlist Changes", pl_total,
+            card = SyncCategoryCard("≡", "Playlist Changes", pl_total,
                                     _CAT_COLORS["playlist"], checkable=True, start_expanded=True,
                                     subtitle="Playlist additions, updates, and removals",
                                     parent=self._cards_container)
@@ -1398,7 +1398,7 @@ class SyncReviewWidget(QWidget):
         # ── Artwork sync (global, info) ─────────────────────────────
         if plan.artwork_needs_sync:
             count = plan.artwork_missing_count
-            card = SyncCategoryCard("🖼️", "Sync Album Art", count,
+            card = SyncCategoryCard("◈", "Sync Album Art", count,
                                     _CAT_COLORS["artwork"], checkable=False, start_expanded=False,
                                     parent=self._cards_container)
             ipod_tracks_cache = getattr(self, '_ipod_tracks_cache', None)
@@ -1493,7 +1493,7 @@ class SyncReviewWidget(QWidget):
             else:
                 self._storage_bar.setStyleSheet(f"""
                     QProgressBar {{
-                        background: rgba(255,255,255,15);
+                        background: {Colors.SURFACE_RAISED};
                         border: none;
                         border-radius: 4px;
                     }}
@@ -1585,9 +1585,9 @@ class SyncReviewWidget(QWidget):
         # Build detail text: completed stages + current progress
         detail_parts = []
         for s in self._completed_stages[-4:]:  # Show last 4 completed stages
-            detail_parts.append(f"<span style='color: rgba(255,255,255,80);'>✓ {s}</span>")
+            detail_parts.append(f"<span style='color: {Colors.TEXT_TERTIARY};'>✓ {s}</span>")
         if message:
-            detail_parts.append(f"<span style='color: rgba(255,255,255,180);'>{message}</span>")
+            detail_parts.append(f"<span style='color: {Colors.TEXT_PRIMARY};'>{message}</span>")
         self.progress_detail.setText("<br>".join(detail_parts))
         self.progress_detail.setTextFormat(Qt.TextFormat.RichText)
 
@@ -1658,7 +1658,7 @@ class SyncReviewWidget(QWidget):
         # Safe-eject reminder
         if success and (added or removed or updated_file or updated_meta):
             lines.append("")
-            lines.append("<span style='color: rgba(255,255,255,100);'>Safely eject your iPod before disconnecting.</span>")
+            lines.append(f"<span style='color: {Colors.TEXT_SECONDARY};'>Safely eject your iPod before disconnecting.</span>")
 
         self.result_details.setText("<br>".join(lines))
         self.result_details.setTextFormat(Qt.TextFormat.RichText)
@@ -1860,7 +1860,7 @@ class SyncReviewWidget(QWidget):
         cl.setContentsMargins(20, 16, 20, 16)
         cl.setSpacing(12)
 
-        confirm_title = QLabel("🔄 Confirm Sync", confirm)
+        confirm_title = QLabel("Confirm Sync", confirm)
         confirm_title.setFont(QFont(FONT_FAMILY, 14, QFont.Weight.Bold))
         cl.addWidget(confirm_title)
 
@@ -1966,7 +1966,7 @@ class PCFolderDialog(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
 
         # Title
-        title = QLabel("📁 Select Music Folder", self)
+        title = QLabel("Select Music Folder", self)
         title.setFont(QFont(FONT_FAMILY, 14, QFont.Weight.Bold))
         layout.addWidget(title)
 
