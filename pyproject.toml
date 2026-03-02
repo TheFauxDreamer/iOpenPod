@@ -22,9 +22,6 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio",
     "Topic :: Multimedia :: Sound/Audio :: Players",
 ]
-[project.scripts]
-iopenpod = "main:run_pyqt_app"
-
 dependencies = [
     "dearpygui>=2.0.0,<3.0.0",
     "pyqt6>=6.9.1,<7.0.0",
@@ -34,6 +31,9 @@ dependencies = [
     "mutagen>=1.47.0,<2.0.0",
     "pyusb>=1.3.1",
 ]
+
+[project.scripts]
+iopenpod = "main:run_pyqt_app"
 
 [build-system]
 requires = ["hatchling"]
