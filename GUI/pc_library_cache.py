@@ -129,8 +129,12 @@ def get_pc_artwork(art_hash: Optional[str]) -> Optional[QPixmap]:
 class _ScanWorkerSignals(QObject):
     finished = pyqtSignal()
     error = pyqtSignal(str)
-    result = pyqtSignal(object)  # list[dict]
+    result = pyqtSignal(object)  # list[dict] — final complete result
+    partial_result = pyqtSignal(object)  # list[dict] — incremental batch
     progress = pyqtSignal(int, int)  # current, total
+
+# How many tracks to accumulate before emitting a partial result batch
+_PARTIAL_BATCH_SIZE = 500
 
 
 class _ScanWorker(QRunnable):
@@ -141,6 +145,10 @@ class _ScanWorker(QRunnable):
         self.music_folder = music_folder
         self.existing_cache = existing_cache  # path -> (mtime, dict)
         self.signals = _ScanWorkerSignals()
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     @pyqtSlot()
     def run(self):
@@ -148,32 +156,45 @@ class _ScanWorker(QRunnable):
             from SyncEngine.pc_library import PCLibrary
             library = PCLibrary(self.music_folder)
 
-            tracks: list[dict] = []
+            all_tracks: list[dict] = []
+            batch: list[dict] = []
             reused = 0
 
             def on_progress(current: int, total: int, track):
                 self.signals.progress.emit(current, total)
 
             for pc_track in library.scan(progress_callback=on_progress):
+                if self._cancelled:
+                    break
+
                 # Check if we can reuse the cached entry
                 cached = self.existing_cache.get(pc_track.path)
                 if cached and abs(cached[0] - pc_track.mtime) < 0.01:
-                    tracks.append(cached[1])
+                    d = cached[1]
                     reused += 1
-                    continue
+                else:
+                    d = _pctrack_to_dict(pc_track)
+                    # Extract and cache artwork thumbnail
+                    _extract_and_cache_art(pc_track.path, pc_track.art_hash)
 
-                d = _pctrack_to_dict(pc_track)
+                all_tracks.append(d)
+                batch.append(d)
 
-                # Extract and cache artwork thumbnail
-                _extract_and_cache_art(pc_track.path, pc_track.art_hash)
+                # Emit partial result every _PARTIAL_BATCH_SIZE tracks
+                if len(batch) >= _PARTIAL_BATCH_SIZE:
+                    self.signals.partial_result.emit(list(batch))
+                    batch.clear()
 
-                tracks.append(d)
+            # Emit any remaining tracks in the last partial batch
+            if batch:
+                self.signals.partial_result.emit(list(batch))
+                batch.clear()
 
             logger.info(
                 "PC library scan complete: %d tracks (%d reused from cache)",
-                len(tracks), reused,
+                len(all_tracks), reused,
             )
-            self.signals.result.emit(tracks)
+            self.signals.result.emit(all_tracks)
         except Exception as e:
             logger.error("PC library scan failed: %s", e, exc_info=True)
             self.signals.error.emit(str(e))
@@ -193,6 +214,7 @@ class PCLibraryCache(QObject):
 
     data_ready = pyqtSignal()
     scan_progress = pyqtSignal(int, int)  # current, total
+    scan_finished = pyqtSignal()          # emitted once when scan fully done
 
     _instance: "PCLibraryCache | None" = None
 
@@ -209,6 +231,7 @@ class PCLibraryCache(QObject):
         self._is_loading: bool = False
         self._is_ready: bool = False
         self._lock = threading.Lock()
+        self._worker: _ScanWorker | None = None
         # Pre-computed indexes
         self._album_index: dict = {}       # (album, artist) -> [tracks]
         self._album_only_index: dict = {}  # album -> [tracks]
@@ -219,11 +242,16 @@ class PCLibraryCache(QObject):
 
     def is_ready(self) -> bool:
         with self._lock:
-            return self._is_ready and not self._is_loading
+            return self._is_ready
 
     def is_loading(self) -> bool:
         with self._lock:
             return self._is_loading
+
+    def cancel_scan(self):
+        """Cancel a running scan."""
+        if self._worker:
+            self._worker.cancel()
 
     def get_tracks(self) -> list[dict]:
         with self._lock:
@@ -279,6 +307,8 @@ class PCLibraryCache(QObject):
         existing = self._load_disk_cache(music_folder)
 
         worker = _ScanWorker(music_folder, existing)
+        self._worker = worker
+        worker.signals.partial_result.connect(self._on_partial_result)
         worker.signals.result.connect(self._on_scan_complete)
         worker.signals.error.connect(self._on_scan_error)
         worker.signals.progress.connect(self.scan_progress.emit)
@@ -297,52 +327,46 @@ class PCLibraryCache(QObject):
 
     # ── Internal ───────────────────────────────────────────────
 
-    def _on_scan_complete(self, tracks: list[dict]):
-        """Called when background scan finishes successfully."""
-        # Build indexes
-        album_index: dict = {}
-        album_only_index: dict = {}
-        artist_index: dict = {}
-        genre_index: dict = {}
-
+    def _index_tracks(self, tracks: list[dict]):
+        """Add tracks to the in-memory indexes (caller holds no lock)."""
         for track in tracks:
             album = track.get("Album", "Unknown Album")
             artist = track.get("Artist", "Unknown Artist")
             album_artist = track.get("Album Artist") or artist
             genre = track.get("Genre", "")
 
-            # Album index
-            album_key = (album, album_artist)
-            album_index.setdefault(album_key, []).append(track)
-
-            # Album-only index
-            album_only_index.setdefault(album, []).append(track)
-
-            # Artist index
-            artist_index.setdefault(artist, []).append(track)
-
-            # Genre index
+            self._album_index.setdefault((album, album_artist), []).append(track)
+            self._album_only_index.setdefault(album, []).append(track)
+            self._artist_index.setdefault(artist, []).append(track)
             if genre:
-                genre_index.setdefault(genre, []).append(track)
+                self._genre_index.setdefault(genre, []).append(track)
 
+    def _on_partial_result(self, batch: list[dict]):
+        """Called with each incremental batch of tracks during scanning."""
         with self._lock:
-            self._tracks = tracks
-            self._album_index = album_index
-            self._album_only_index = album_only_index
-            self._artist_index = artist_index
-            self._genre_index = genre_index
+            self._tracks.extend(batch)
+            self._index_tracks(batch)
+            self._is_ready = True  # Content available after first batch
+
+        self.data_ready.emit()
+
+    def _on_scan_complete(self, tracks: list[dict]):
+        """Called when background scan finishes successfully."""
+        with self._lock:
             self._is_loading = False
-            self._is_ready = True
+            self._worker = None
 
         # Save to disk cache for next launch
         self._save_disk_cache(self._music_folder, tracks)
 
+        self.scan_finished.emit()
         self.data_ready.emit()
 
     def _on_scan_error(self, error_msg: str):
         """Called when background scan fails."""
         with self._lock:
             self._is_loading = False
+            self._worker = None
         logger.error("PC library scan error: %s", error_msg)
 
     # ── Disk cache persistence ─────────────────────────────────

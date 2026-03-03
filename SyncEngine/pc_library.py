@@ -499,7 +499,7 @@ class PCLibrary:
 
     def _extract_mp4(self, audio) -> dict:
         """Extract from MP4/M4A tags."""
-        metadata = {}
+        metadata = self._extract_easy(audio)
 
         # MP4 uses different tag names
         tag_map = {

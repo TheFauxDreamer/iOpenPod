@@ -214,6 +214,84 @@ class _DownloadProgressDialog(QDialog):
         self._status.setText(text)
 
 
+class _ScanProgressDialog(QDialog):
+    """Non-modal dialog showing PC library scan progress."""
+
+    cancelled = pyqtSignal()
+
+    def __init__(self, parent: QWidget):
+        super().__init__(parent)
+        self.setWindowTitle("Scanning Library")
+        self.setFixedSize(400, 170)
+        self.setModal(False)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {Colors.DIALOG_BG};
+                color: {Colors.TEXT_PRIMARY};
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(12)
+
+        title = QLabel("Scanning Music Library")
+        title.setFont(QFont(FONT_FAMILY, 13, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY};")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        self._status = QLabel("Preparing...")
+        self._status.setFont(QFont(FONT_FAMILY, 10))
+        self._status.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._status)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 100)
+        self._bar.setValue(0)
+        self._bar.setFixedHeight(6)
+        self._bar.setTextVisible(False)
+        self._bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: {Colors.SURFACE};
+                border: none;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background: {Colors.ACCENT};
+                border-radius: 3px;
+            }}
+        """)
+        layout.addWidget(self._bar)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFont(QFont(FONT_FAMILY, 10))
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(btn_css(
+            bg=Colors.SURFACE_RAISED,
+            bg_hover=Colors.SURFACE_HOVER,
+            bg_press=Colors.SURFACE_ACTIVE,
+            border=f"1px solid {Colors.BORDER_SUBTLE}",
+            padding="6px 20px",
+        ))
+        cancel_btn.clicked.connect(self._on_cancel)
+        layout.addWidget(cancel_btn, 0, Qt.AlignmentFlag.AlignCenter)
+
+    def update_progress(self, current: int, total: int):
+        """Update progress bar and status text."""
+        if total > 0:
+            pct = int((current / total) * 100)
+            self._bar.setValue(pct)
+            self._status.setText(f"Processing {current:,} of {total:,} songs")
+        else:
+            self._status.setText(f"Processing {current:,} songs...")
+
+    def _on_cancel(self):
+        self.cancelled.emit()
+        self.close()
+
+
 class CancellationToken:
     """Thread-safe cancellation token for workers."""
 
@@ -1058,10 +1136,14 @@ class MainWindow(QMainWindow):
         from GUI.pc_library_cache import PCLibraryCache
         self._pc_cache = PCLibraryCache.get_instance()
         self._pc_cache.data_ready.connect(self._onPCLibraryReady)
+        self._pc_cache.scan_finished.connect(self._onPCScanFinished)
+        self._pc_cache.scan_progress.connect(self._onPCScanProgress)
+        self._scan_progress_dialog: _ScanProgressDialog | None = None
 
         # Default to Library view and start PC scan if music folder is set
         self.musicBrowser.setDataSource("library")
         if settings.music_folder and not self._pc_cache.is_ready() and not self._pc_cache.is_loading():
+            self._showScanProgress()
             self._pc_cache.start_scan(settings.music_folder)
 
         # Restore last device path — only if it still looks like a real
@@ -1129,9 +1211,36 @@ class MainWindow(QMainWindow):
                 )
 
     def _onPCLibraryReady(self):
-        """Called when PC library scan finishes."""
+        """Called when PC library has data available (may be partial)."""
         if self.musicBrowser.dataSource() == "library":
             self.musicBrowser.onDataReady()
+
+    def _onPCScanFinished(self):
+        """Called when PC library scan fully completes."""
+        self._hideScanProgress()
+
+    def _onPCScanProgress(self, current: int, total: int):
+        """Update the scan progress dialog."""
+        if self._scan_progress_dialog and self._scan_progress_dialog.isVisible():
+            self._scan_progress_dialog.update_progress(current, total)
+
+    def _showScanProgress(self):
+        """Show the library scan progress dialog."""
+        if self._scan_progress_dialog is None:
+            self._scan_progress_dialog = _ScanProgressDialog(self)
+            self._scan_progress_dialog.cancelled.connect(self._onScanCancelled)
+        self._scan_progress_dialog.show()
+
+    def _hideScanProgress(self):
+        """Hide and clean up the scan progress dialog."""
+        if self._scan_progress_dialog:
+            self._scan_progress_dialog.close()
+            self._scan_progress_dialog = None
+
+    def _onScanCancelled(self):
+        """User cancelled the library scan."""
+        self._pc_cache.cancel_scan()
+        self._hideScanProgress()
 
     def _onLibrarySelected(self):
         """Switch the main content area to show PC library."""
@@ -1140,6 +1249,7 @@ class MainWindow(QMainWindow):
         cache = self._pc_cache
         settings = get_settings()
         if settings.music_folder and not cache.is_ready() and not cache.is_loading():
+            self._showScanProgress()
             cache.start_scan(settings.music_folder)
         elif cache.is_ready():
             self.musicBrowser.onDataReady()
@@ -1512,6 +1622,7 @@ class MainWindow(QMainWindow):
         if new_folder and new_folder != old_folder:
             cache = self._pc_cache
             cache.clear()
+            self._showScanProgress()
             cache.start_scan(new_folder)
             if self.musicBrowser.dataSource() == "library":
                 self.musicBrowser.reloadData()
