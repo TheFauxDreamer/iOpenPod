@@ -554,7 +554,7 @@ class Sidebar(QFrame):
         self.sidebarLayout.addStretch()
 
         # Settings button at bottom
-        self.settingsButton = QPushButton("⚙\uFE0E  Settings")
+        self.settingsButton = QPushButton("Settings")
         self.settingsButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self.settingsButton.setStyleSheet(btn_css(
             bg="transparent",
