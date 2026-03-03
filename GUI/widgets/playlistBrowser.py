@@ -4,14 +4,14 @@ PlaylistBrowser — Dedicated playlist browsing widget.
 Layout:
     ┌─────────────────────┐ ┌──────────────────────────────────────┐
     │  PLAYLISTS           │ │  PlaylistInfoCard                    │
-    │  📋 My Mix           │ │  Title, type, stats, smart rules     │
-    │  📋 Road Trip        │ ├──────────────────────────────────────┤
+    │  My Mix              │ │  Title, type, stats, smart rules     │
+    │  Road Trip           │ ├──────────────────────────────────────┤
     │                      │ │  TrackListTitleBar                   │
     │  SMART PLAYLISTS     │ │  MusicBrowserList (tracks)           │
-    │  🧠 Top Rated        │ │                                      │
+    │  Top Rated           │ │                                      │
     │                      │ │                                      │
     │  PODCASTS            │ │                                      │
-    │  🎙 My Podcast       │ │                                      │
+    │  My Podcast          │ │                                      │
     │                      │ │                                      │
     │  ░ Library (Master)  │ │                                      │
     └─────────────────────┘ └──────────────────────────────────────┘
@@ -1118,7 +1118,7 @@ class PlaylistBrowser(QFrame):
         # Show a saving indicator on the info card
         self.infoCard.edit_btn.setEnabled(False)
         self.infoCard.evaluate_btn.setEnabled(False)
-        self.infoCard.evaluate_btn.setText("⏳ Writing…")
+        self.infoCard.evaluate_btn.setText("\u231B Writing\u2026")
         self.infoCard.evaluate_btn.setVisible(True)
 
         self._eval_worker = _PlaylistWriteWorker(playlist)

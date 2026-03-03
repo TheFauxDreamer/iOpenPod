@@ -35,7 +35,7 @@ _BUNDLED_FONTS = {
 # Substitution chain: when the primary font can't render a glyph, Qt falls
 # back through this list.  Order matters – symbols before emoji so that
 # single-codepoint dingbats (★☆✓ etc.) prefer the sharper Symbols 2 glyphs
-# and emoji sequences (🎵💿📂) fall through to Noto Emoji.
+# and emoji sequences fall through to Noto Emoji.
 _SUBSTITUTIONS = ["Noto Sans Symbols 2", "Noto Emoji"]
 
 

@@ -874,7 +874,7 @@ class SyncReviewWidget(QWidget):
         empty_layout = QVBoxLayout(empty_widget)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        empty_icon = QLabel("✅", empty_widget)
+        empty_icon = QLabel("\u2713", empty_widget)
         empty_icon.setFont(QFont(FONT_FAMILY, 48))
         empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(empty_icon)
@@ -1421,7 +1421,7 @@ class SyncReviewWidget(QWidget):
 
         # ── Fingerprint errors ──────────────────────────────────────
         if plan.fingerprint_errors:
-            card = SyncCategoryCard("⚠️", "Fingerprint Errors", len(plan.fingerprint_errors),
+            card = SyncCategoryCard("\u26A0", "Fingerprint Errors", len(plan.fingerprint_errors),
                                     _CAT_COLORS["error"], checkable=False, start_expanded=False,
                                     parent=self._cards_container)
             for filepath, error_msg in plan.fingerprint_errors[:50]:
@@ -1434,7 +1434,7 @@ class SyncReviewWidget(QWidget):
         if plan.duplicates:
             dup_count = plan.duplicate_count
             card = SyncCategoryCard(
-                "⚠️", f"Duplicates ({len(plan.duplicates)} groups)",
+                "\u26A0", f"Duplicates ({len(plan.duplicates)} groups)",
                 dup_count, _CAT_COLORS["duplicate"], checkable=False, start_expanded=False,
                 parent=self._cards_container,
             )
@@ -1610,15 +1610,15 @@ class SyncReviewWidget(QWidget):
 
         # Title
         if success and not errors:
-            self.result_icon.setText("✅")
+            self.result_icon.setText("\u2713")
             self.result_title.setText("Sync Complete")
             self.result_title.setStyleSheet(f"color: {Colors.SUCCESS}; font-size: 18px; font-weight: bold;")
         elif errors:
-            self.result_icon.setText("⚠️")
+            self.result_icon.setText("\u26A0")
             self.result_title.setText("Sync Completed with Errors")
             self.result_title.setStyleSheet(f"color: {Colors.WARNING}; font-size: 18px; font-weight: bold;")
         else:
-            self.result_icon.setText("❌")
+            self.result_icon.setText("\u2717")
             self.result_title.setText("Sync Failed")
             self.result_title.setStyleSheet(f"color: {Colors.DANGER}; font-size: 18px; font-weight: bold;")
 

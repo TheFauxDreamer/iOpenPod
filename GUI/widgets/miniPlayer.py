@@ -99,9 +99,9 @@ class MiniPlayer(QFrame):
         btn_row.setSpacing(12)
         btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._prev_btn = QPushButton("\u23EE")  # ⏮
-        self._play_btn = QPushButton("\u25B6")  # ▶
-        self._next_btn = QPushButton("\u23ED")  # ⏭
+        self._prev_btn = QPushButton("\u23EE")
+        self._play_btn = QPushButton("\u25B6")
+        self._next_btn = QPushButton("\u23ED")
 
         for btn in (self._prev_btn, self._play_btn, self._next_btn):
             btn.setFixedSize(32, 32)
@@ -145,7 +145,7 @@ class MiniPlayer(QFrame):
         vol_row = QHBoxLayout()
         vol_row.setSpacing(4)
 
-        vol_icon = QLabel("\U0001F509")  # 🔉
+        vol_icon = QLabel("\u266B")
         vol_icon.setFont(QFont(FONT_FAMILY, 10))
         vol_row.addWidget(vol_icon)
 
@@ -235,9 +235,9 @@ class MiniPlayer(QFrame):
 
     def _on_state_changed(self, state: str):
         if state == "playing":
-            self._play_btn.setText("\u23F8")  # ⏸
+            self._play_btn.setText("\u23F8")
         else:
-            self._play_btn.setText("\u25B6")  # ▶
+            self._play_btn.setText("\u25B6")
 
     def _on_position_changed(self, ms: int):
         if not self._seeking:
@@ -280,7 +280,7 @@ class MiniPlayer(QFrame):
             """)
         else:
             self._art_label.clear()
-            self._art_label.setText("\u266A")  # ♪
+            self._art_label.setText("\u266A")
             self._art_label.setFont(QFont(FONT_FAMILY, 20))
             self._art_label.setStyleSheet(f"""
                 background: {Colors.SURFACE_HOVER};

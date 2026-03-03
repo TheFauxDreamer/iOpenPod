@@ -147,7 +147,7 @@ class DeviceCard(QFrame):
         layout.setSpacing(12)
 
         # Icon
-        icon = QLabel("\U0001F4F1")
+        icon = QLabel("\u25A3")
         icon.setFont(QFont(FONT_FAMILY, 22))
         icon.setStyleSheet("background: transparent; border: none;")
         icon.setFixedWidth(36)
@@ -259,7 +259,7 @@ class SnapshotCard(QFrame):
             delta_text = " · ".join(delta_parts) + " vs previous"
             delta_color = Colors.TEXT_TERTIARY
         elif is_initial:
-            delta_text = "✨ Initial backup"
+            delta_text = "\u2605 Initial backup"
             delta_color = Colors.ACCENT
         else:
             delta_text = "No changes vs previous"
@@ -952,7 +952,7 @@ class BackupBrowserWidget(QWidget):
         if result:
             # Show brief success screen before returning to list
             elapsed = self._format_elapsed(time.monotonic() - self._eta_start_time)
-            self._progress_title.setText("✅ Backup Complete")
+            self._progress_title.setText("\u2713 Backup Complete")
             self._progress_bar.setRange(0, 1)
             self._progress_bar.setValue(1)
             self._progress_stats.setText(
@@ -964,7 +964,7 @@ class BackupBrowserWidget(QWidget):
         elif no_changes:
             # No changes since last backup — show brief info then return
             elapsed = self._format_elapsed(time.monotonic() - self._eta_start_time)
-            self._progress_title.setText("✅ Already Up to Date")
+            self._progress_title.setText("\u2713 Already Up to Date")
             self._progress_bar.setRange(0, 1)
             self._progress_bar.setValue(1)
             self._progress_stats.setText("No files changed since last backup")

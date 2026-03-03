@@ -53,7 +53,7 @@ class _MissingToolsDialog(QDialog):
         layout.setSpacing(10)
 
         # Icon + title row
-        icon_label = QLabel("⚠️")
+        icon_label = QLabel("\u26A0")
         icon_label.setFont(QFont(FONT_FAMILY, 22))
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
