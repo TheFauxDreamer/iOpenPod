@@ -416,6 +416,7 @@ def build_app_stylesheet() -> str:
     }}
     QWidget {{
         font-family: {_CSS_FONT_STACK};
+        color: {p.TEXT_PRIMARY};
     }}
     QStackedWidget {{
         background: transparent;
@@ -423,6 +424,9 @@ def build_app_stylesheet() -> str:
     QFrame {{
         background: transparent;
         border: none;
+    }}
+    QLabel {{
+        color: {p.TEXT_PRIMARY};
     }}
 
     /* ── Tooltips ──────────────────────────────────────────────── */

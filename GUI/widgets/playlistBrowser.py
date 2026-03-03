@@ -173,6 +173,32 @@ class PlaylistInfoCard(QFrame):
 
         self._detail_labels: list[QWidget] = []
         self._current_playlist: dict | None = None
+        self._sep = sep
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self) -> None:
+        """Refresh inline styles when theme changes."""
+        self.setStyleSheet(f"""
+            QFrame#playlistInfoCard {{
+                background: {Colors.SURFACE};
+                border: 1px solid {Colors.BORDER_SUBTLE};
+                border-radius: {Metrics.BORDER_RADIUS_LG}px;
+            }}
+        """)
+        self.title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
+        self.type_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self.stats_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self._sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE}; border: none;")
+        self.edit_btn.setStyleSheet(btn_css(
+            bg="transparent",
+            bg_hover=Colors.ACCENT_DIM,
+            bg_press=Colors.ACCENT_PRESS,
+            fg=Colors.ACCENT,
+            border=f"1px solid {Colors.ACCENT_BORDER}",
+            padding="3px 12px",
+        ))
 
     # ─────────────────────────────────────────────────────────────
     # Public API
@@ -502,6 +528,19 @@ class PlaylistListPanel(QFrame):
         self._selected_btn: QPushButton | None = None
         self._playlist_map: dict[int, dict] = {}  # button index -> playlist dict
 
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self) -> None:
+        """Refresh inline styles when theme changes."""
+        self.setStyleSheet(f"""
+            QFrame#playlistListPanel {{
+                background: {Colors.SURFACE};
+                border: 1px solid {Colors.BORDER_SUBTLE};
+                border-radius: {Metrics.BORDER_RADIUS_LG}px;
+            }}
+        """)
+
     # ─────────────────────────────────────────────────────────────
     # Public API
     # ─────────────────────────────────────────────────────────────
@@ -791,6 +830,23 @@ class PlaylistBrowser(QFrame):
         """)
 
         main_layout.addWidget(self.rightSplitter, stretch=1)
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self) -> None:
+        """Refresh inline styles when theme changes."""
+        self.rightSplitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background: {Colors.BORDER_SUBTLE};
+            }}
+            QSplitter::handle:hover {{
+                background: {Colors.ACCENT};
+            }}
+            QSplitter::handle:pressed {{
+                background: {Colors.ACCENT_LIGHT};
+            }}
+        """)
 
     # ─────────────────────────────────────────────────────────────
     # Public API

@@ -572,6 +572,69 @@ class BackupBrowserWidget(QWidget):
 
         self._stack.addWidget(self._devices_page)  # Index 3
 
+        # Store cancel button ref for theme rebuilding
+        self._cancel_btn = cancel_btn
+
+        # Connect to theme changes
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+        self._rebuild_styles()
+
+    def _rebuild_styles(self):
+        """Rebuild inline styles from current theme palette."""
+        self._back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.ACCENT};
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
+        """)
+        self._title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
+        self._all_devices_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.ACCENT};
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
+        """)
+        self._open_folder_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: 1px solid {Colors.BORDER_SUBTLE};
+                border-radius: {Metrics.BORDER_RADIUS}px;
+            }}
+            QPushButton:hover {{ background: {Colors.SURFACE_ALT}; border-color: {Colors.BORDER}; }}
+        """)
+        self.backup_now_btn.setStyleSheet(accent_btn_css())
+        self._size_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
+        self._progress_title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
+        self._progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {Colors.SURFACE_ALT};
+                border: none;
+                border-radius: 4px;
+            }}
+            QProgressBar::chunk {{
+                background: {Colors.ACCENT};
+                border-radius: 4px;
+            }}
+        """)
+        self._progress_file.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
+        self._progress_stats.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
+        self._progress_eta.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
+        self._cancel_btn.setStyleSheet(btn_css(
+            bg=Colors.SURFACE_RAISED,
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE_ALT,
+            border=f"1px solid {Colors.BORDER}",
+        ))
+        self._empty_text.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
+        self._devices_subtitle.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
+
     # ── Public API ──────────────────────────────────────────────────────
 
     def refresh(self):

@@ -22,13 +22,6 @@ class SettingRow(QFrame):
 
     def __init__(self, title: str, description: str = ""):
         super().__init__()
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {Colors.SURFACE_ALT};
-                border: 1px solid {Colors.BORDER_SUBTLE};
-                border-radius: {Metrics.BORDER_RADIUS}px;
-            }}
-        """)
 
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(16, 12, 16, 12)
@@ -40,17 +33,33 @@ class SettingRow(QFrame):
 
         self.title_label = QLabel(title)
         self.title_label.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
-        self.title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
         text_layout.addWidget(self.title_label)
 
+        self.desc_label = None
         if description:
             self.desc_label = QLabel(description)
             self.desc_label.setFont(QFont(FONT_FAMILY, 9))
-            self.desc_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
             self.desc_label.setWordWrap(True)
             text_layout.addWidget(self.desc_label)
 
         self._layout.addLayout(text_layout, stretch=1)
+
+        self._rebuild_row_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_row_styles)
+
+    def _rebuild_row_styles(self):
+        """Rebuild styles from current theme palette."""
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {Colors.SURFACE_ALT};
+                border: 1px solid {Colors.BORDER_SUBTLE};
+                border-radius: {Metrics.BORDER_RADIUS}px;
+            }}
+        """)
+        self.title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
+        if self.desc_label:
+            self.desc_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
 
     def add_control(self, widget: QWidget):
         """Add a control widget to the right side of the row."""
@@ -68,6 +77,14 @@ class ToggleRow(SettingRow):
 
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(checked)
+        self._rebuild_toggle_style()
+        self.checkbox.toggled.connect(self.changed.emit)
+        self.add_control(self.checkbox)
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_toggle_style)
+
+    def _rebuild_toggle_style(self):
         self.checkbox.setStyleSheet(f"""
             QCheckBox {{
                 background: transparent;
@@ -85,8 +102,6 @@ class ToggleRow(SettingRow):
                 border: 1px solid {Colors.ACCENT};
             }}
         """)
-        self.checkbox.toggled.connect(self.changed.emit)
-        self.add_control(self.checkbox)
 
     @property
     def value(self) -> bool:
@@ -109,6 +124,20 @@ class ComboRow(SettingRow):
         self.combo = QComboBox()
         self.combo.setFixedWidth(130)
         self.combo.setFont(QFont(FONT_FAMILY, 10))
+        self._rebuild_combo_style()
+        if options:
+            self.combo.addItems(options)
+        if current:
+            idx = self.combo.findText(current)
+            if idx >= 0:
+                self.combo.setCurrentIndex(idx)
+        self.combo.currentTextChanged.connect(self.changed.emit)
+        self.add_control(self.combo)
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_combo_style)
+
+    def _rebuild_combo_style(self):
         self.combo.setStyleSheet(f"""
             QComboBox {{
                 background: {Colors.SURFACE_RAISED};
@@ -138,14 +167,6 @@ class ComboRow(SettingRow):
                 outline: none;
             }}
         """)
-        if options:
-            self.combo.addItems(options)
-        if current:
-            idx = self.combo.findText(current)
-            if idx >= 0:
-                self.combo.setCurrentIndex(idx)
-        self.combo.currentTextChanged.connect(self.changed.emit)
-        self.add_control(self.combo)
 
     @property
     def value(self) -> str:
@@ -458,26 +479,16 @@ class SettingsPage(QWidget):
         tb_layout = QHBoxLayout(title_bar)
         tb_layout.setContentsMargins(24, 16, 24, 8)
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFont(QFont(FONT_FAMILY, 11))
-        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.ACCENT};
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
-        """)
-        back_btn.clicked.connect(self._on_close)
-        tb_layout.addWidget(back_btn)
+        self._back_btn = QPushButton("← Back")
+        self._back_btn.setFont(QFont(FONT_FAMILY, 11))
+        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._back_btn.clicked.connect(self._on_close)
+        tb_layout.addWidget(self._back_btn)
 
-        title = QLabel("Settings")
-        title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tb_layout.addWidget(title, stretch=1)
+        self._title = QLabel("Settings")
+        self._title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tb_layout.addWidget(self._title, stretch=1)
 
         # Spacer to balance the back button
         spacer = QWidget()
@@ -673,10 +684,42 @@ class SettingsPage(QWidget):
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
+        # Apply initial styles and connect to theme changes
+        self._rebuild_page_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_page_styles)
+
+    def _rebuild_page_styles(self):
+        """Rebuild settings page styles from current theme palette."""
+        self._back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.ACCENT};
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
+        """)
+        self._title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
+        self.reset_cache_dir_btn.setStyleSheet(btn_css(
+            bg=Colors.SURFACE,
+            bg_hover=Colors.SURFACE_RAISED,
+            bg_press=Colors.SURFACE_ALT,
+            fg=Colors.TEXT_SECONDARY,
+            border=f"1px solid {Colors.BORDER}",
+            padding="4px 8px",
+        ))
+        for label in getattr(self, '_section_labels', []):
+            label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
+
     def _section_label(self, text: str) -> QLabel:
         label = QLabel(text)
         label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
         label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
+        # Track section labels for theme rebuilding
+        if not hasattr(self, '_section_labels'):
+            self._section_labels = []
+        self._section_labels.append(label)
         return label
 
     def load_from_settings(self):

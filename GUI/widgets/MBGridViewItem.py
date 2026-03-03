@@ -240,7 +240,7 @@ class MusicBrowserGridItem(QFrame):
                         background-color: rgba({r}, {g}, {b}, 30);
                         border: 1px solid rgba({r}, {g}, {b}, 25);
                         border-radius: {Metrics.BORDER_RADIUS_XL}px;
-                        color: white;
+                        color: {Colors.TEXT_PRIMARY};
                     }}
                     QFrame:hover {{
                         background-color: rgba({r}, {g}, {b}, 55);

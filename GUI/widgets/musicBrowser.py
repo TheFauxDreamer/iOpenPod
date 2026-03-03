@@ -99,6 +99,24 @@ class MusicBrowser(QFrame):
 
         self.mainLayout.addWidget(self.stack)
 
+        # Connect to theme changes
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self):
+        """Rebuild inline styles from current theme palette."""
+        self.gridTrackSplitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background: {Colors.BORDER_SUBTLE};
+            }}
+            QSplitter::handle:hover {{
+                background: {Colors.ACCENT};
+            }}
+            QSplitter::handle:pressed {{
+                background: {Colors.ACCENT_LIGHT};
+            }}
+        """)
+
     def reloadData(self):
         """Reload data from the current device."""
         self.browserGrid.clearGrid()

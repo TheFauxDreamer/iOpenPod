@@ -44,15 +44,21 @@ class StatWidget(QWidget):
 
         self.value_label = QLabel(value)
         self.value_label.setFont(QFont(FONT_FAMILY, 13, QFont.Weight.Bold))
-        self.value_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.value_label)
 
         self.desc_label = QLabel(label)
         self.desc_label.setFont(QFont(FONT_FAMILY, 8))
-        self.desc_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
         self.desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.desc_label)
+
+        self._rebuild_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self):
+        self.value_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
+        self.desc_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
 
     def setValue(self, value: str):
         """Update the value text."""
@@ -71,16 +77,22 @@ class TechInfoRow(QWidget):
 
         self.label_widget = QLabel(label)
         self.label_widget.setFont(QFont(FONT_FAMILY, 8))
-        self.label_widget.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
         layout.addWidget(self.label_widget)
 
         layout.addStretch()
 
         self.value_widget = QLabel(value)
         self.value_widget.setFont(QFont(MONO_FONT_FAMILY, 8))
-        self.value_widget.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
         self.value_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.value_widget)
+
+        self._rebuild_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self):
+        self.label_widget.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
+        self.value_widget.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
 
     def setValue(self, value: str):
         """Update the value text."""
@@ -95,15 +107,6 @@ class DeviceInfoCard(QFrame):
     def __init__(self):
         super().__init__()
         self._rename_edit: QLineEdit | None = None
-        from ..theme import ThemeManager
-        a = ThemeManager.instance().accent
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {a.rgba(40)};
-                border: 1px solid {a.rgba(70)};
-                border-radius: {Metrics.BORDER_RADIUS_LG}px;
-            }}
-        """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -126,7 +129,6 @@ class DeviceInfoCard(QFrame):
 
         self.name_label = QLabel("No Device")
         self.name_label.setFont(QFont(FONT_FAMILY, 13, QFont.Weight.Bold))
-        self.name_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
         self.name_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.name_label.setToolTip("Click to rename your iPod")
         self.name_label.mousePressEvent = lambda ev: self._start_rename()
@@ -134,7 +136,6 @@ class DeviceInfoCard(QFrame):
 
         self.model_label = QLabel("")
         self.model_label.setFont(QFont(FONT_FAMILY, 9))
-        self.model_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
         self.model_label.setWordWrap(True)
         name_layout.addWidget(self.model_label)
 
@@ -143,10 +144,9 @@ class DeviceInfoCard(QFrame):
         layout.addLayout(header_layout)
 
         # Separator
-        sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background-color: {Colors.BORDER}; border: none;")
-        layout.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFixedHeight(1)
+        layout.addWidget(self._sep)
 
         # Stats grid
         stats_widget = QWidget()
@@ -176,18 +176,6 @@ class DeviceInfoCard(QFrame):
         # Technical details section (collapsible)
         self.tech_toggle = QPushButton("▶ Technical Details")
         self.tech_toggle.setFont(QFont(FONT_FAMILY, 8))
-        self.tech_toggle.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.TEXT_TERTIARY};
-                text-align: left;
-                padding: 2px 0;
-            }}
-            QPushButton:hover {{
-                color: {Colors.TEXT_SECONDARY};
-            }}
-        """)
         self.tech_toggle.clicked.connect(self._toggle_tech_details)
         layout.addWidget(self.tech_toggle)
 
@@ -235,6 +223,42 @@ class DeviceInfoCard(QFrame):
         self.storage_bar = QProgressBar()
         self.storage_bar.setFixedHeight(5)
         self.storage_bar.setTextVisible(False)
+        self.storage_bar.hide()  # Hidden until we have capacity data
+        layout.addWidget(self.storage_bar)
+
+        self._tech_expanded = False
+
+        # Apply initial styles and connect to theme changes
+        self._rebuild_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    def _rebuild_styles(self):
+        """Rebuild all inline styles from the current theme palette."""
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {a.rgba(40)};
+                border: 1px solid {a.rgba(70)};
+                border-radius: {Metrics.BORDER_RADIUS_LG}px;
+            }}
+        """)
+        self.name_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
+        self.model_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self._sep.setStyleSheet(f"background-color: {Colors.BORDER}; border: none;")
+        self.tech_toggle.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.TEXT_TERTIARY};
+                text-align: left;
+                padding: 2px 0;
+            }}
+            QPushButton:hover {{
+                color: {Colors.TEXT_SECONDARY};
+            }}
+        """)
         self.storage_bar.setStyleSheet(f"""
             QProgressBar {{
                 background-color: {Colors.SURFACE_ACTIVE};
@@ -246,10 +270,6 @@ class DeviceInfoCard(QFrame):
                 border-radius: 2px;
             }}
         """)
-        self.storage_bar.hide()  # Hidden until we have capacity data
-        layout.addWidget(self.storage_bar)
-
-        self._tech_expanded = False
 
     def _start_rename(self, event=None):
         """Show an inline QLineEdit to rename the iPod."""
@@ -446,13 +466,6 @@ class Sidebar(QFrame):
     def __init__(self):
         from ..app import category_glyphs
         super().__init__()
-        self.setStyleSheet(f"""
-            QFrame#sidebar {{
-                background-color: {Colors.SURFACE};
-                border: 1px solid {Colors.BORDER};
-                border-radius: {Metrics.BORDER_RADIUS_LG}px;
-            }}
-        """)
         self.setObjectName("sidebar")
 
         self.sidebarLayout = QVBoxLayout(self)
@@ -508,16 +521,14 @@ class Sidebar(QFrame):
         self.sidebarLayout.addWidget(self.backupButton)
 
         # Separator
-        sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE};")
-        self.sidebarLayout.addWidget(sep)
+        self._sidebar_sep = QFrame()
+        self._sidebar_sep.setFixedHeight(1)
+        self.sidebarLayout.addWidget(self._sidebar_sep)
 
         # Category label
-        lib_label = QLabel("LIBRARY")
-        lib_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
-        lib_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px;")
-        self.sidebarLayout.addWidget(lib_label)
+        self._lib_label = QLabel("LIBRARY")
+        self._lib_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
+        self.sidebarLayout.addWidget(self._lib_label)
 
         self.buttons = {}
 
@@ -556,7 +567,74 @@ class Sidebar(QFrame):
         self.sidebarLayout.addWidget(self.settingsButton)
 
         self.selectedCategory = list(category_glyphs.keys())[0]
+
+        # Apply initial styles and connect to theme changes
+        self._rebuild_sidebar_styles()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_sidebar_styles)
+
         self.selectCategory(self.selectedCategory)
+
+    def _rebuild_sidebar_styles(self):
+        """Rebuild sidebar styles from current theme palette."""
+        self.setStyleSheet(f"""
+            QFrame#sidebar {{
+                background-color: {Colors.SURFACE};
+                border: 1px solid {Colors.BORDER};
+                border-radius: {Metrics.BORDER_RADIUS_LG}px;
+            }}
+        """)
+        self._sidebar_sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE};")
+        self._lib_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px;")
+
+        # Rebuild button styles
+        button_style = btn_css(
+            bg=Colors.SURFACE_RAISED,
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE_ALT,
+            padding="7px 0",
+        )
+        self.deviceButton.setStyleSheet(button_style)
+        self.rescanButton.setStyleSheet(button_style)
+        self.syncButton.setStyleSheet(accent_btn_css())
+        self.backupButton.setStyleSheet(btn_css(
+            bg=Colors.SURFACE_ALT,
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE,
+            padding="8px 12px",
+            extra="text-align: left;",
+        ))
+        self.settingsButton.setStyleSheet(btn_css(
+            bg="transparent",
+            bg_hover=Colors.SURFACE_RAISED,
+            bg_press=Colors.SURFACE,
+            fg=Colors.TEXT_SECONDARY,
+            padding="8px 12px",
+            extra="text-align: left;",
+        ))
+
+        # Rebuild category button styles
+        for cat, btn in self.buttons.items():
+            if cat == self.selectedCategory:
+                from ..theme import ThemeManager
+                a = ThemeManager.instance().accent
+                btn.setStyleSheet(btn_css(
+                    bg=Colors.ACCENT,
+                    bg_hover=a.rgba(200),
+                    bg_press=a.rgba(160),
+                    radius=Metrics.BORDER_RADIUS_SM,
+                    padding="9px 12px",
+                    extra="text-align: left;",
+                ))
+            else:
+                btn.setStyleSheet(btn_css(
+                    bg=Colors.SURFACE_ALT,
+                    bg_hover=Colors.SURFACE_ACTIVE,
+                    bg_press=Colors.SURFACE,
+                    radius=Metrics.BORDER_RADIUS_SM,
+                    padding="9px 12px",
+                    extra="text-align: left;",
+                ))
 
     def updateDeviceInfo(self, name: str, model: str, tracks: int, albums: int,
                          size_bytes: int, duration_ms: int,

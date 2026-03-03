@@ -281,6 +281,13 @@ class MusicBrowserList(QFrame):
         self._grab_h_value = 0
         self._grab_v_value = 0
 
+        # Track whether dominant color tinting is active
+        self._dominant_color_active = False
+
+        # Connect to theme changes
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
     # -------------------------------------------------------------------------
     # Properties for backwards compatibility
     # -------------------------------------------------------------------------
@@ -390,6 +397,56 @@ class MusicBrowserList(QFrame):
         table_vp = t.viewport()
         if table_vp:
             table_vp.installEventFilter(self)
+
+    def _rebuild_styles(self) -> None:
+        """Rebuild table and status label styles from current theme palette."""
+        if self._dominant_color_active:
+            return  # Don't override album color tinting
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {Colors.SURFACE};
+                alternate-background-color: {Colors.SURFACE_ALT};
+                border: none;
+                color: {Colors.TEXT_PRIMARY};
+                gridline-color: {Colors.GRIDLINE};
+                selection-background-color: {Colors.SELECTION};
+                outline: none;
+            }}
+            QTableWidget::item {{
+                padding: 6px 8px;
+                border-bottom: 1px solid {Colors.BORDER_SUBTLE};
+            }}
+            QTableWidget::item:selected {{
+                background-color: {Colors.SELECTION};
+            }}
+            QTableWidget::item:hover {{
+                background-color: {Colors.SURFACE_HOVER};
+            }}
+            QHeaderView::section {{
+                background-color: {Colors.SURFACE_ALT};
+                color: {Colors.TEXT_SECONDARY};
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 1px solid {Colors.BORDER};
+                font-weight: 600;
+                font-size: 11px;
+            }}
+            QHeaderView::section:hover {{
+                background-color: {Colors.SURFACE_RAISED};
+                color: {Colors.TEXT_PRIMARY};
+            }}
+            QHeaderView::section:pressed {{
+                background-color: {Colors.SURFACE_ACTIVE};
+            }}
+            QTableCornerButton::section {{
+                background-color: {Colors.SURFACE_ALT};
+                border: none;
+                border-bottom: 1px solid {Colors.BORDER};
+            }}
+        """)
+        self._status_label.setStyleSheet(
+            f"color: {Colors.TEXT_SECONDARY}; padding: 3px 8px;"
+        )
             t.setMouseTracking(True)
 
         t.setSortingEnabled(True)
