@@ -398,6 +398,9 @@ class MusicBrowserList(QFrame):
         if table_vp:
             table_vp.installEventFilter(self)
 
+        t.setMouseTracking(True)
+        t.setSortingEnabled(True)
+
     def _rebuild_styles(self) -> None:
         """Rebuild table and status label styles from current theme palette."""
         if self._dominant_color_active:
@@ -447,9 +450,6 @@ class MusicBrowserList(QFrame):
         self._status_label.setStyleSheet(
             f"color: {Colors.TEXT_SECONDARY}; padding: 3px 8px;"
         )
-            t.setMouseTracking(True)
-
-        t.setSortingEnabled(True)
 
     # -------------------------------------------------------------------------
     # Colorful Album Background (iTunes 11 style)
