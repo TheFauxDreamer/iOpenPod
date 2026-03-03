@@ -2,28 +2,29 @@ from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtWidgets import QHBoxLayout, QFrame, QLabel, QPushButton, QWidget
 from PyQt6.QtGui import QFont
 
-from ..styles import FONT_FAMILY
+from ..styles import Colors, FONT_FAMILY
 
 
-def _title_bar_css(r1: int, g1: int, b1: int, r2: int, g2: int, b2: int) -> str:
-    """Generate the title bar stylesheet for given gradient colors."""
+def _title_bar_css(r: int, g: int, b: int) -> str:
+    """Generate a subtle tinted title bar stylesheet for the given RGB color."""
     return f"""
         QFrame {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba({r1},{g1},{b1},220), stop:1 rgba({r2},{g2},{b2},220));
+                stop:0 rgba({r},{g},{b},50), stop:1 rgba({r},{g},{b},30));
             border: none;
+            border-bottom: 1px solid rgba({r},{g},{b},60);
             border-radius: 0px;
         }}
         QLabel {{
             font-weight: 600;
             font-size: 12px;
-            color: white;
+            color: {Colors.TEXT_PRIMARY};
             background: transparent;
         }}
         QPushButton {{
             background-color: transparent;
             border: none;
-            color: rgba(255,255,255,180);
+            color: {Colors.TEXT_SECONDARY};
             font-size: 14px;
             font-weight: bold;
             width: 26px;
@@ -31,22 +32,21 @@ def _title_bar_css(r1: int, g1: int, b1: int, r2: int, g2: int, b2: int) -> str:
             border-radius: 4px;
         }}
         QPushButton:hover {{
-            background-color: rgba(255,255,255,25);
-            color: white;
+            background-color: rgba({r},{g},{b},40);
+            color: {Colors.TEXT_PRIMARY};
         }}
         QPushButton:pressed {{
-            background-color: rgba(0,0,0,25);
+            background-color: rgba({r},{g},{b},60);
         }}
     """
 
 
 def _default_css() -> str:
-    """Build the default accent-colored gradient CSS."""
+    """Build the default accent-colored title bar CSS."""
     from ..theme import ThemeManager
     a = ThemeManager.instance().accent
     r, g, b = a.rgb
-    dr, dg, db = a.dark_rgb
-    return _title_bar_css(r, g, b, dr, dg, db)
+    return _title_bar_css(r, g, b)
 
 
 class TrackListTitleBar(QFrame):
@@ -66,7 +66,11 @@ class TrackListTitleBar(QFrame):
         self.setMaximumHeight(34)
         self.setFixedHeight(34)
 
+        self._custom_color: tuple[int, int, int] | None = None
         self.setStyleSheet(_default_css())
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
 
         self.title = QLabel("Tracks")
         self.title.setFont(QFont(FONT_FAMILY, 12, QFont.Weight.DemiBold))
@@ -89,18 +93,21 @@ class TrackListTitleBar(QFrame):
         self.title.setText(title)
 
     def setColor(self, r: int, g: int, b: int):
-        """Set the title bar gradient to the given RGB color."""
-        r2 = min(255, r + 25)
-        g2 = min(255, g + 25)
-        b2 = min(255, b + 25)
-        r3 = max(0, r - 25)
-        g3 = max(0, g - 25)
-        b3 = max(0, b - 25)
-        self.setStyleSheet(_title_bar_css(r2, g2, b2, r3, g3, b3))
+        """Set the title bar tint to the given RGB color."""
+        self._custom_color = (r, g, b)
+        self.setStyleSheet(_title_bar_css(r, g, b))
 
     def resetColor(self):
-        """Reset to the default blue gradient."""
+        """Reset to the default accent gradient."""
+        self._custom_color = None
         self.setStyleSheet(_default_css())
+
+    def _rebuild_styles(self):
+        """Rebuild stylesheet with current theme colors."""
+        if self._custom_color:
+            self.setStyleSheet(_title_bar_css(*self._custom_color))
+        else:
+            self.setStyleSheet(_default_css())
 
     def _toggleMinimize(self):
         """Minimize the track list panel."""
