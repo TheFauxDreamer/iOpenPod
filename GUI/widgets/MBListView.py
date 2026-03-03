@@ -11,8 +11,9 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint
-from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QColor, QCursor, QKeyEvent, QWheelEvent, QMouseEvent
+import json
+from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint, QMimeData
+from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QColor, QCursor, QKeyEvent, QWheelEvent, QMouseEvent, QDrag
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -330,6 +331,11 @@ class MusicBrowserList(QFrame):
         t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         t.setAlternatingRowColors(True)
 
+        # Enable drag from table rows
+        t.setDragEnabled(True)
+        t.setDefaultDropAction(Qt.DropAction.CopyAction)
+        t.startDrag = self._startDrag
+
         # Right-click context menu on track rows
         t.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         t.customContextMenuRequested.connect(self._on_track_context_menu)
@@ -400,6 +406,33 @@ class MusicBrowserList(QFrame):
 
         t.setMouseTracking(True)
         t.setSortingEnabled(True)
+
+    def _startDrag(self, supportedActions):
+        """Custom drag handler: serialize selected tracks as iopenpod items."""
+        selected = self.table.selectionModel().selectedRows()
+        if not selected:
+            return
+        tracks = []
+        for idx in selected:
+            row = idx.row()
+            if 0 <= row < len(self._tracks):
+                track = self._tracks[row]
+                tracks.append({
+                    "type": "track",
+                    "title": track.get("Title", ""),
+                    "artist": track.get("Artist", ""),
+                    "album": track.get("Album", ""),
+                    "_pc_path": track.get("_pc_path", ""),
+                })
+        if not tracks:
+            return
+        drag = QDrag(self.table)
+        mime = QMimeData()
+        mime.setData("application/x-iopenpod-items", json.dumps(tracks).encode())
+        count = len(tracks)
+        mime.setText(f"{count} track{'s' if count != 1 else ''}")
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.CopyAction)
 
     def _rebuild_styles(self) -> None:
         """Rebuild table and status label styles from current theme palette."""
@@ -534,11 +567,16 @@ class MusicBrowserList(QFrame):
     # Public API - Loading and Filtering
     # -------------------------------------------------------------------------
 
-    def loadTracks(self) -> None:
-        """Load all tracks from the cache and apply current filter."""
-        from ..app import iTunesDBCache
+    def loadTracks(self, cache=None) -> None:
+        """Load all tracks from the cache and apply current filter.
 
-        cache = iTunesDBCache.get_instance()
+        Args:
+            cache: Data cache to use.  If None, falls back to iTunesDBCache.
+        """
+        if cache is None:
+            from ..app import iTunesDBCache
+            cache = iTunesDBCache.get_instance()
+
         if not cache.is_ready():
             return
 
@@ -654,8 +692,13 @@ class MusicBrowserList(QFrame):
     def _ensure_tracks_loaded(self) -> None:
         """Ensure tracks are loaded before filtering (without populating table)."""
         if not self._all_tracks:
+            # Try PC library cache first, then iPod cache
+            from ..pc_library_cache import PCLibraryCache
+            pc_cache = PCLibraryCache.get_instance()
+            if pc_cache.is_ready():
+                self._all_tracks = pc_cache.get_tracks()
+                return
             from ..app import iTunesDBCache
-
             cache = iTunesDBCache.get_instance()
             if cache.is_ready():
                 self._all_tracks = cache.get_tracks()

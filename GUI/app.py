@@ -812,9 +812,10 @@ class WorkerSignals(QObject):
 # Data Transform Functions (convert cached data to UI-ready format)
 # ============================================================================
 
-def build_album_list(cache: iTunesDBCache) -> list:
+def build_album_list(cache) -> list:
     """Transform cached data into album list for grid display.
 
+    Works with both iTunesDBCache and PCLibraryCache.
     Uses the pre-built album index for O(1) lookups instead of O(n*m) scan.
     Falls back to album-only lookup when mhia entry lacks artist info.
     """
@@ -843,12 +844,14 @@ def build_album_list(cache: iTunesDBCache) -> list:
             artist = "Unknown Artist"
 
         mhiiLink = None
+        pc_art_hash = None
         track_count = len(matching_tracks)
         year = None
         total_length_ms = 0
 
         if track_count > 0:
             mhiiLink = matching_tracks[0].get("mhiiLink")
+            pc_art_hash = matching_tracks[0].get("_pc_art_hash")
             # Get year from first track that has it
             year = next((t.get("year") for t in matching_tracks if t.get("year")), None)
             # Calculate total album duration
@@ -868,6 +871,7 @@ def build_album_list(cache: iTunesDBCache) -> list:
             "artist": artist,
             "year": year,
             "mhiiLink": mhiiLink,
+            "_pc_art_hash": pc_art_hash,
             "category": "Albums",
             "filter_key": "Album",
             "filter_value": album,
@@ -878,9 +882,10 @@ def build_album_list(cache: iTunesDBCache) -> list:
     return sorted(items, key=lambda x: x["title"].lower())
 
 
-def build_artist_list(cache: iTunesDBCache) -> list:
+def build_artist_list(cache) -> list:
     """Transform cached data into artist list for grid display.
 
+    Works with both iTunesDBCache and PCLibraryCache.
     Uses the pre-built artist index for O(1) lookups.
     """
     artist_index = cache.get_artist_index()
@@ -888,8 +893,9 @@ def build_artist_list(cache: iTunesDBCache) -> list:
     items = []
     for artist, tracks in artist_index.items():
         track_count = len(tracks)
-        # Get first available artwork
+        # Get first available artwork (iPod mhiiLink or PC art_hash)
         mhiiLink = next((t.get("mhiiLink") for t in tracks if t.get("mhiiLink")), None)
+        pc_art_hash = next((t.get("_pc_art_hash") for t in tracks if t.get("_pc_art_hash")), None)
         # Count unique albums
         album_count = len(set(t.get("Album", "") for t in tracks))
         # Total plays
@@ -908,6 +914,7 @@ def build_artist_list(cache: iTunesDBCache) -> list:
             "title": artist,
             "subtitle": subtitle,
             "mhiiLink": mhiiLink,
+            "_pc_art_hash": pc_art_hash,
             "category": "Artists",
             "filter_key": "Artist",
             "filter_value": artist,
@@ -919,9 +926,10 @@ def build_artist_list(cache: iTunesDBCache) -> list:
     return sorted(items, key=lambda x: x["title"].lower())
 
 
-def build_genre_list(cache: iTunesDBCache) -> list:
+def build_genre_list(cache) -> list:
     """Transform cached data into genre list for grid display.
 
+    Works with both iTunesDBCache and PCLibraryCache.
     Uses the pre-built genre index for O(1) lookups.
     """
     genre_index = cache.get_genre_index()
@@ -929,8 +937,9 @@ def build_genre_list(cache: iTunesDBCache) -> list:
     items = []
     for genre, tracks in genre_index.items():
         track_count = len(tracks)
-        # Get first available artwork
+        # Get first available artwork (iPod mhiiLink or PC art_hash)
         mhiiLink = next((t.get("mhiiLink") for t in tracks if t.get("mhiiLink")), None)
+        pc_art_hash = next((t.get("_pc_art_hash") for t in tracks if t.get("_pc_art_hash")), None)
         # Count unique artists
         artist_count = len(set(t.get("Artist", "") for t in tracks))
         # Total duration
@@ -949,6 +958,7 @@ def build_genre_list(cache: iTunesDBCache) -> list:
             "title": genre,
             "subtitle": " · ".join(subtitle_parts),
             "mhiiLink": mhiiLink,
+            "_pc_art_hash": pc_art_hash,
             "category": "Genres",
             "filter_key": "Genre",
             "filter_value": genre,
@@ -1012,8 +1022,13 @@ class MainWindow(QMainWindow):
         settings = get_settings()
         self._last_pc_folder = settings.music_folder or os.path.join(os.path.expanduser("~"), "Music")
 
+        # Connect sidebar navigation
+        self.sidebar.library_selected.connect(self._onLibrarySelected)
+        self.sidebar.ipod_selected.connect(self._onIpodSelected)
+
+        # Legacy: category_changed still works for backwards compat
         self.sidebar.category_changed.connect(
-            self.musicBrowser.updateCategory)  # Connect the signal to the slot
+            self.musicBrowser.updateCategory)
 
         # Connect device rename
         self.sidebar.device_renamed.connect(self._onDeviceRenamed)
@@ -1038,6 +1053,16 @@ class MainWindow(QMainWindow):
 
         # Connect cache ready signal to refresh UI
         iTunesDBCache.get_instance().data_ready.connect(self.onDataReady)
+
+        # Connect PC library cache ready signal
+        from GUI.pc_library_cache import PCLibraryCache
+        self._pc_cache = PCLibraryCache.get_instance()
+        self._pc_cache.data_ready.connect(self._onPCLibraryReady)
+
+        # Default to Library view and start PC scan if music folder is set
+        self.musicBrowser.setDataSource("library")
+        if settings.music_folder and not self._pc_cache.is_ready() and not self._pc_cache.is_loading():
+            self._pc_cache.start_scan(settings.music_folder)
 
         # Restore last device path — only if it still looks like a real
         # iPod (not a leftover project test-data folder, etc.).
@@ -1102,6 +1127,29 @@ class MainWindow(QMainWindow):
                     "  <selected folder>/iPod_Control/iTunes/\n\n"
                     "Please select the root folder of your iPod."
                 )
+
+    def _onPCLibraryReady(self):
+        """Called when PC library scan finishes."""
+        if self.musicBrowser.dataSource() == "library":
+            self.musicBrowser.onDataReady()
+
+    def _onLibrarySelected(self):
+        """Switch the main content area to show PC library."""
+        self.musicBrowser.setDataSource("library")
+        # Trigger scan if we have a music folder and cache isn't ready
+        cache = self._pc_cache
+        settings = get_settings()
+        if settings.music_folder and not cache.is_ready() and not cache.is_loading():
+            cache.start_scan(settings.music_folder)
+        elif cache.is_ready():
+            self.musicBrowser.onDataReady()
+
+    def _onIpodSelected(self, path: str):
+        """Switch the main content area to show iPod content."""
+        self.musicBrowser.setDataSource("ipod")
+        cache = iTunesDBCache.get_instance()
+        if cache.is_ready():
+            self.musicBrowser.onDataReady()
 
     def onDeviceChanged(self, path: str):
         """Handle device selection - start loading data."""
@@ -1455,8 +1503,18 @@ class MainWindow(QMainWindow):
         """Return from settings to the main browsing view."""
         # Re-read persisted settings to pick up changes
         settings = get_settings()
-        self._last_pc_folder = settings.music_folder or self._last_pc_folder
+        new_folder = settings.music_folder or ""
+        old_folder = self._last_pc_folder
+        self._last_pc_folder = new_folder or old_folder
         self.centralStack.setCurrentIndex(0)
+
+        # If music folder changed, trigger a rescan of the PC library
+        if new_folder and new_folder != old_folder:
+            cache = self._pc_cache
+            cache.clear()
+            cache.start_scan(new_folder)
+            if self.musicBrowser.dataSource() == "library":
+                self.musicBrowser.reloadData()
 
     def showBackupBrowser(self):
         """Show the backup browser page."""

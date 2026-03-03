@@ -1,215 +1,204 @@
+"""
+MusicBrowser – main content area with a category tab bar and view stack.
+
+Supports two data sources (switched via setDataSource):
+  - "ipod" : reads from iTunesDBCache (default, current behaviour)
+  - "library" : reads from PCLibraryCache (local PC music folder)
+"""
+
 import logging
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtWidgets import QScrollArea, QFrame, QSplitter, QVBoxLayout, QSizePolicy, QStackedWidget
+from PyQt6.QtWidgets import (
+    QScrollArea, QFrame, QVBoxLayout, QSizePolicy, QStackedWidget, QLabel,
+)
+from PyQt6.QtGui import QFont
+
+from .categoryTabBar import CategoryTabBar
 from .MBGridView import MusicBrowserGrid
 from .MBListView import MusicBrowserList
 from .playlistBrowser import PlaylistBrowser
-from .trackListTitleBar import TrackListTitleBar
-from ..styles import Colors
+from ..styles import Colors, FONT_FAMILY
 
 log = logging.getLogger(__name__)
 
 
 class MusicBrowser(QFrame):
-    """Main browser widget with grid and track list views."""
+    """Main content area: tab bar + scrollable grid / track list / playlist views."""
 
     def __init__(self):
         super().__init__()
         self._current_category = "Albums"
+        self._data_source = "ipod"  # "ipod" or "library"
 
         self.mainLayout = QVBoxLayout(self)
         self.mainLayout.setContentsMargins(0, 0, 0, 0)
         self.mainLayout.setSpacing(0)
 
-        self.gridTrackSplitter = QSplitter(Qt.Orientation.Vertical)
+        # ── Tab bar ────────────────────────────────────────────
+        self.tabBar = CategoryTabBar()
+        self.tabBar.category_changed.connect(self._onTabChanged)
+        self.mainLayout.addWidget(self.tabBar)
 
-        # Top: Grid Browser in scroll area
+        # ── Content stack ──────────────────────────────────────
+        self.stack = QStackedWidget()
+        self.mainLayout.addWidget(self.stack)
+
+        # Index 0: Grid view (Albums / Artists / Genres) inside a scroll area
         self.browserGrid = MusicBrowserGrid()
         self.browserGrid.item_selected.connect(self._onGridItemSelected)
 
         self.browserGridScroll = QScrollArea()
         self.browserGridScroll.setWidgetResizable(True)
-        self.browserGridScroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.browserGridScroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.browserGridScroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.browserGridScroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.browserGridScroll.setMinimumHeight(0)
         self.browserGridScroll.setMinimumWidth(0)
-        self.browserGridScroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.browserGridScroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.browserGridScroll.minimumSizeHint = lambda: QSize(0, 0)
         self.browserGridScroll.setWidget(self.browserGrid)
         self.browserGridScroll.setStyleSheet("""
-            QScrollArea {
-                background: transparent;
-                border: none;
-            }
+            QScrollArea { background: transparent; border: none; }
         """)
+        self.stack.addWidget(self.browserGridScroll)  # index 0
 
-        self.gridTrackSplitter.addWidget(self.browserGridScroll)
-
-        # Bottom: Track Browser
-        self.trackContainer = QFrame()
-        self.trackContainerLayout = QVBoxLayout(self.trackContainer)
-        self.trackContainerLayout.setContentsMargins(0, 0, 0, 0)
-        self.trackContainerLayout.setSpacing(0)
-
+        # Index 1: Songs / track list (full-height, no grid)
         self.browserTrack = MusicBrowserList()
         self.browserTrack.setMinimumHeight(0)
         self.browserTrack.setMinimumWidth(0)
-        self.browserTrack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.browserTrack.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.browserTrack.minimumSizeHint = lambda: QSize(0, 0)
+        self.stack.addWidget(self.browserTrack)  # index 1
 
-        # Track Browser TitleBar
-        self.trackListTitleBar = TrackListTitleBar(self.gridTrackSplitter)
-        self.trackContainerLayout.addWidget(self.trackListTitleBar)
-        self.trackContainerLayout.addWidget(self.browserTrack)
-
-        self.gridTrackSplitter.addWidget(self.trackContainer)
-
-        # Splitter properties
-        handle = self.gridTrackSplitter.handle(1)
-        if handle:
-            handle.setEnabled(True)
-        self.gridTrackSplitter.setCollapsible(0, True)
-        self.gridTrackSplitter.setCollapsible(1, True)
-        self.gridTrackSplitter.setHandleWidth(3)
-        self.gridTrackSplitter.setStretchFactor(0, 2)
-        self.gridTrackSplitter.setStretchFactor(1, 1)
-        self.gridTrackSplitter.setMinimumSize(0, 0)
-        self.gridTrackSplitter.setStyleSheet(f"""
-            QSplitter::handle {{
-                background: {Colors.BORDER_SUBTLE};
-            }}
-            QSplitter::handle:hover {{
-                background: {Colors.ACCENT};
-            }}
-            QSplitter::handle:pressed {{
-                background: {Colors.ACCENT_LIGHT};
-            }}
-        """)
-
-        # Set initial sizes (60% grid, 40% tracks)
-        self.gridTrackSplitter.setSizes([600, 400])
-
-        # Playlist browser (shown when Playlists category is active)
+        # Index 2: Playlist browser
         self.playlistBrowser = PlaylistBrowser()
+        self.stack.addWidget(self.playlistBrowser)  # index 2
 
-        # Use a stacked widget to toggle between grid/track and playlist views
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self.gridTrackSplitter)   # index 0
-        self.stack.addWidget(self.playlistBrowser)      # index 1
-
-        self.mainLayout.addWidget(self.stack)
+        # Index 3: Empty state (no music folder / no iPod)
+        self._emptyState = self._build_empty_state()
+        self.stack.addWidget(self._emptyState)  # index 3
 
         # Connect to theme changes
         from ..theme import ThemeManager
         ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
 
-    def _rebuild_styles(self):
-        """Rebuild inline styles from current theme palette."""
-        self.gridTrackSplitter.setStyleSheet(f"""
-            QSplitter::handle {{
-                background: {Colors.BORDER_SUBTLE};
-            }}
-            QSplitter::handle:hover {{
-                background: {Colors.ACCENT};
-            }}
-            QSplitter::handle:pressed {{
-                background: {Colors.ACCENT_LIGHT};
-            }}
-        """)
+    # ── Data source switching ──────────────────────────────────
+
+    def setDataSource(self, source: str):
+        """Switch between 'ipod' and 'library' data sources."""
+        if source not in ("ipod", "library"):
+            return
+        if source == self._data_source:
+            return
+        self._data_source = source
+        self._refreshCurrentCategory()
+
+    def dataSource(self) -> str:
+        return self._data_source
+
+    # ── Public API ─────────────────────────────────────────────
 
     def reloadData(self):
-        """Reload data from the current device."""
+        """Clear all views and wait for new data."""
         self.browserGrid.clearGrid()
         self.browserTrack.clearTable()
         self.playlistBrowser.clear()
-        # Data will be loaded when cache emits data_ready
 
     def onDataReady(self):
-        """Called when iTunesDB cache is loaded. Refresh current view."""
+        """Called when the active cache finishes loading."""
         self._refreshCurrentCategory()
 
     def updateCategory(self, category: str):
-        """Update the display for the selected category."""
-        log.debug(f"updateCategory() called: {category}")
+        """Programmatically switch category (used by sidebar in old flow)."""
+        log.debug("updateCategory() called: %s", category)
+        # Sidebar uses "Tracks"; tab bar uses "Songs"
         self._current_category = category
+        tab_name = "Songs" if category == "Tracks" else category
+        self.tabBar.setActiveCategory(tab_name)
+        self._refreshCurrentCategory()
+
+    # ── Internal ───────────────────────────────────────────────
+
+    def _onTabChanged(self, category: str):
+        """Handle tab bar click."""
+        # Map "Songs" tab label to internal category name
+        internal = "Tracks" if category == "Songs" else category
+        self._current_category = internal
         self._refreshCurrentCategory()
 
     def _refreshCurrentCategory(self):
-        """Refresh display based on current category and cache state."""
-        log.debug(f"_refreshCurrentCategory() called: {self._current_category}")
-        from ..app import iTunesDBCache
-        cache = iTunesDBCache.get_instance()
+        """Load the appropriate view for the current category + data source."""
+        log.debug("_refreshCurrentCategory: %s (source=%s)",
+                  self._current_category, self._data_source)
 
-        # Don't do anything if cache isn't ready yet
-        if not cache.is_ready():
-            log.debug("  Cache not ready, returning")
+        cache = self._get_cache()
+        if cache is None or not cache.is_ready():
+            # Show empty state if no data available
+            if self._data_source == "library":
+                if cache and cache.is_loading():
+                    self._show_empty("Scanning your music library...")
+                else:
+                    from ..settings import get_settings
+                    if get_settings().music_folder:
+                        self._show_empty("Scanning your music library...")
+                    else:
+                        self._show_empty("Set your music folder in Settings to browse your library.")
+            else:
+                self._show_empty("Connect an iPod to browse its music.")
             return
 
         category = self._current_category
 
         if category == "Tracks":
-            log.debug("  Showing Tracks view")
-            self.stack.setCurrentIndex(0)
-            # Hide grid, show all tracks
-            self.browserGridScroll.hide()
-            self.browserGrid.clearGrid()  # Clear grid to cancel pending image loads
-            self.browserTrack.clearTable()  # Clear track list before reloading
-            self.browserTrack.clearFilter()
-            self.browserTrack.loadTracks()
-            self.trackListTitleBar.setTitle("All Tracks")
-            self.trackListTitleBar.resetColor()
-            self.browserTrack.resetDominantColor()
-        elif category == "Playlists":
-            log.debug("  Showing Playlists view")
             self.stack.setCurrentIndex(1)
+            self.browserTrack.clearTable()
+            self.browserTrack.clearFilter()
+            self.browserTrack.resetDominantColor()
+            self.browserTrack.loadTracks(cache=cache)
+        elif category == "Playlists":
+            self.stack.setCurrentIndex(2)
             self.playlistBrowser.loadPlaylists()
         else:
-            log.debug(f"  Showing grid view for: {category}")
+            # Albums, Artists, Genres → grid view
             self.stack.setCurrentIndex(0)
-            # Show grid for Albums, Artists, Genres
-            self.browserGridScroll.show()
-            self.browserGrid.loadCategory(category)
-            # Clear track list filter - user needs to select an item
-            self.browserTrack.clearFilter()
-            self.trackListTitleBar.setTitle(f"Select a{'n' if category[0] in 'AE' else ''} {category[:-1]}")
-            self.trackListTitleBar.resetColor()
-            self.browserTrack.resetDominantColor()
+            self.browserGrid.loadCategory(category, cache=cache)
 
     def _onGridItemSelected(self, item_data: dict):
-        """Handle when a grid item is clicked."""
-        log.debug(f"_onGridItemSelected: {item_data.get('title', 'unknown')}")
-        category = item_data.get("category", "Albums")
-        title = item_data.get("title", "")
-        filter_key = item_data.get("filter_key")
-        filter_value = item_data.get("filter_value")
+        """Handle grid item click — will trigger inline expansion in Phase 3."""
+        log.debug("_onGridItemSelected: %s", item_data.get("title", "?"))
+        # Phase 3 will add the inline album expansion here.
+        # For now, this is a no-op placeholder.
 
-        # Update title bar and track list with album color (iTunes 11 style)
-        self.trackListTitleBar.setTitle(title)
-        dominant_color = item_data.get("dominant_color")
-        album_colors = item_data.get("album_colors")
-
-        from ..settings import get_settings
-        colorful = get_settings().colorful_albums
-
-        if dominant_color and colorful:
-            r, g, b = dominant_color
-            self.trackListTitleBar.setColor(r, g, b)
-            text = album_colors.get("text") if album_colors else None
-            text_sec = album_colors.get("text_secondary") if album_colors else None
-            self.browserTrack.setDominantColor(r, g, b, text=text, text_secondary=text_sec)
+    def _get_cache(self):
+        """Return the active cache object based on the current data source."""
+        if self._data_source == "library":
+            from ..pc_library_cache import PCLibraryCache
+            return PCLibraryCache.get_instance()
         else:
-            self.trackListTitleBar.resetColor()
-            self.browserTrack.resetDominantColor()
+            from ..app import iTunesDBCache
+            return iTunesDBCache.get_instance()
 
-        # Apply filter to track list
-        if filter_key and filter_value:
-            log.debug(f"  Applying filter: {filter_key}={filter_value}")
-            self.browserTrack.applyFilter(item_data)
-        elif category == "Albums":
-            album = item_data.get("album") or title
-            artist = item_data.get("artist") or item_data.get("subtitle")
-            self.browserTrack.filterByAlbum(album, artist)
-        elif category == "Artists":
-            self.browserTrack.filterByArtist(title)
-        elif category == "Genres":
-            self.browserTrack.filterByGenre(title)
+    def _show_empty(self, message: str):
+        """Show the empty state with a message."""
+        self._emptyLabel.setText(message)
+        self.stack.setCurrentIndex(3)
+
+    def _build_empty_state(self) -> QFrame:
+        """Build a centered empty-state placeholder."""
+        frame = QFrame()
+        layout = QVBoxLayout(frame)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._emptyLabel = QLabel("")
+        self._emptyLabel.setFont(QFont(FONT_FAMILY, 12))
+        self._emptyLabel.setStyleSheet(f"color: {Colors.TEXT_TERTIARY};")
+        self._emptyLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._emptyLabel.setWordWrap(True)
+        layout.addWidget(self._emptyLabel)
+        return frame
+
+    def _rebuild_styles(self):
+        """Rebuild theme-sensitive inline styles."""
+        self._emptyLabel.setStyleSheet(f"color: {Colors.TEXT_TERTIARY};")

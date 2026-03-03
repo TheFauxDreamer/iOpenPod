@@ -1,7 +1,8 @@
+import json
 import logging
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtWidgets import QLabel, QFrame, QVBoxLayout
-from PyQt6.QtGui import QFont, QPixmap, QCursor, QImage
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QMimeData, QPoint
+from PyQt6.QtWidgets import QLabel, QFrame, QVBoxLayout, QApplication
+from PyQt6.QtGui import QFont, QPixmap, QCursor, QImage, QDrag
 from ..imgMaker import find_image_by_imgId, get_artworkdb_cached
 from ..styles import Colors, FONT_FAMILY, Metrics
 from .scrollingLabel import ScrollingLabel
@@ -43,7 +44,11 @@ class MusicBrowserGridItem(QFrame):
         """)
         self.gridItemLayout.addWidget(self.img_label)
 
-        if mhiiLink is not None:
+        # Check for PC artwork first, then iPod artwork
+        pc_art_hash = self.item_data.get("_pc_art_hash") if self.item_data else None
+        if pc_art_hash:
+            self._loadPCArtwork(pc_art_hash)
+        elif mhiiLink is not None:
             self.loadImage()
         else:
             self._setPlaceholderImage()
@@ -93,8 +98,47 @@ class MusicBrowserGridItem(QFrame):
 
     def mousePressEvent(self, a0):
         if a0 and a0.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.item_data)
+            self._drag_start_pos = a0.pos()
         super().mousePressEvent(a0)
+
+    def mouseReleaseEvent(self, a0):
+        if a0 and a0.button() == Qt.MouseButton.LeftButton:
+            # Only emit click if we didn't start a drag
+            if hasattr(self, '_drag_start_pos') and self._drag_start_pos is not None:
+                self.clicked.emit(self.item_data)
+            self._drag_start_pos = None
+        super().mouseReleaseEvent(a0)
+
+    def mouseMoveEvent(self, a0):
+        if not (a0.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if not hasattr(self, '_drag_start_pos') or self._drag_start_pos is None:
+            return
+        if (a0.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return
+        # Start drag
+        self._drag_start_pos = None  # Prevent click on release
+        drag = QDrag(self)
+        mime = QMimeData()
+        # Serialize item data for drop target
+        drag_data = {
+            "type": "grid_item",
+            "title": self.item_data.get("title", ""),
+            "category": self.item_data.get("category", ""),
+            "filter_key": self.item_data.get("filter_key", ""),
+            "filter_value": self.item_data.get("filter_value", ""),
+            "artist": self.item_data.get("artist", ""),
+            "album": self.item_data.get("album", ""),
+        }
+        mime.setData("application/x-iopenpod-items", json.dumps(drag_data).encode())
+        mime.setText(self.item_data.get("title", ""))
+        drag.setMimeData(mime)
+        # Use artwork thumbnail as drag pixmap
+        pm = self.img_label.pixmap()
+        if pm and not pm.isNull():
+            drag.setPixmap(pm.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation))
+        drag.exec(Qt.DropAction.CopyAction)
 
     def cleanup(self):
         """Mark widget as destroyed and cancel any pending work."""
@@ -109,6 +153,61 @@ class MusicBrowserGridItem(QFrame):
             except (TypeError, RuntimeError) as e:
                 log.debug(f"  Signal disconnect failed: {e}")
             self.worker = None
+
+    def _loadPCArtwork(self, art_hash: str):
+        """Load artwork from PC library art cache (thumbnail on disk)."""
+        from ..pc_library_cache import get_pc_artwork
+        pixmap = get_pc_artwork(art_hash)
+        if pixmap and not pixmap.isNull():
+            pixmap = pixmap.scaled(
+                Metrics.GRID_ART_SIZE, Metrics.GRID_ART_SIZE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.img_label.setPixmap(pixmap)
+            self.img_label.setStyleSheet(f"""
+                border: none;
+                background: transparent;
+                border-radius: {Metrics.BORDER_RADIUS}px;
+            """)
+            # Compute dominant color for tinting and expander
+            self._computePCColors(pixmap)
+        else:
+            self._setPlaceholderImage()
+
+    def _computePCColors(self, pixmap: QPixmap):
+        """Compute dominant color and album colors from a PC artwork pixmap."""
+        try:
+            from ..imgMaker import getDominantColor, getAlbumColors
+            # Convert QPixmap to PIL Image for color analysis
+            qimage = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+            width, height = qimage.width(), qimage.height()
+            ptr = qimage.bits()
+            ptr.setsize(width * height * 4)
+            from PIL import Image
+            pil_image = Image.frombytes("RGBA", (width, height), bytes(ptr))
+            dcol = getDominantColor(pil_image)
+            album_colors = getAlbumColors(pil_image)
+
+            if dcol:
+                self.item_data["dominant_color"] = dcol
+                r, g, b = dcol
+                self.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: rgba({r}, {g}, {b}, 30);
+                        border: 1px solid rgba({r}, {g}, {b}, 25);
+                        border-radius: {Metrics.BORDER_RADIUS_XL}px;
+                        color: {Colors.TEXT_PRIMARY};
+                    }}
+                    QFrame:hover {{
+                        background-color: rgba({r}, {g}, {b}, 55);
+                        border: 1px solid rgba({r}, {g}, {b}, 45);
+                    }}
+                """)
+            if album_colors:
+                self.item_data["album_colors"] = album_colors
+        except Exception as e:
+            log.debug("PC color computation failed: %s", e)
 
     def loadImage(self):
         from ..app import Worker, ThreadPoolSingleton, DeviceManager

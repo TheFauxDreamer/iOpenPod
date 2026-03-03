@@ -1,3 +1,4 @@
+import json
 from PyQt6.QtCore import pyqtSignal, Qt, QRegularExpression
 from PyQt6.QtWidgets import (
     QFrame, QPushButton, QVBoxLayout, QHBoxLayout,
@@ -459,124 +460,162 @@ class DeviceInfoCard(QFrame):
             row.setValue("—")
 
 
+class _DroppableButton(QPushButton):
+    """QPushButton that accepts drops of iopenpod items."""
+    items_dropped = pyqtSignal(list)  # list of drag-data dicts
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+        self._drop_highlight = False
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-iopenpod-items"):
+            event.acceptProposedAction()
+            self._drop_highlight = True
+            self._update_drop_style()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._drop_highlight = False
+        self._update_drop_style()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self._drop_highlight = False
+        self._update_drop_style()
+        mime = event.mimeData()
+        if mime.hasFormat("application/x-iopenpod-items"):
+            raw = bytes(mime.data("application/x-iopenpod-items")).decode()
+            try:
+                data = json.loads(raw)
+                # Could be a single item or list
+                items = data if isinstance(data, list) else [data]
+                self.items_dropped.emit(items)
+            except Exception:
+                pass
+            event.acceptProposedAction()
+
+    def _update_drop_style(self):
+        """Visual feedback when dragging over the button."""
+        # The parent sidebar will re-apply styles; we just toggle a property
+        self.setProperty("dropHighlight", self._drop_highlight)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+
 class Sidebar(QFrame):
-    category_changed = pyqtSignal(str)
-    device_renamed = pyqtSignal(str)  # emits new iPod name
+    """Sidebar with device info card, Library/Devices navigation, and action buttons."""
+
+    category_changed = pyqtSignal(str)  # Legacy — kept for compatibility
+    device_renamed = pyqtSignal(str)    # emits new iPod name
+    library_selected = pyqtSignal()     # user clicked Library
+    ipod_selected = pyqtSignal(str)     # user clicked an iPod device (path)
+    items_queued = pyqtSignal(list)     # items dropped onto iPod for sync
 
     def __init__(self):
-        from ..app import category_glyphs
         super().__init__()
         self.setObjectName("sidebar")
+        self._active_source = "library"  # "library" or "ipod"
 
         self.sidebarLayout = QVBoxLayout(self)
         self.sidebarLayout.setContentsMargins(10, 12, 10, 12)
         self.sidebarLayout.setSpacing(8)
         self.setFixedWidth(Metrics.SIDEBAR_WIDTH)
 
-        # Device info card at top
+        # ── Device info card (top, shown when iPod connected) ──
         self.device_card = DeviceInfoCard()
         self.device_card.device_renamed.connect(self.device_renamed)
+        self.device_card.hide()  # Hidden until a device is connected
         self.sidebarLayout.addWidget(self.device_card)
 
-        # Device select buttons - row 1
-        self.deviceSelectLayout = QHBoxLayout()
-        self.deviceSelectLayout.setContentsMargins(0, 0, 0, 0)
-        self.deviceSelectLayout.setSpacing(6)
+        # ── LIBRARY section ──
+        self._lib_label = QLabel("LIBRARY")
+        self._lib_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
+        self.sidebarLayout.addWidget(self._lib_label)
 
-        self.deviceButton = QPushButton("▸ Select")
-        self.rescanButton = QPushButton("↻ Rescan")
+        self.libraryButton = QPushButton("Library")
+        self.libraryButton.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
+        self.libraryButton.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.libraryButton.clicked.connect(self._on_library_clicked)
+        self.sidebarLayout.addWidget(self.libraryButton)
 
-        button_style = btn_css(
-            bg=Colors.SURFACE_RAISED,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE_ALT,
-            padding="7px 0",
-        )
-        self.deviceButton.setStyleSheet(button_style)
-        self.rescanButton.setStyleSheet(button_style)
+        # ── DEVICES section ──
+        self._dev_sep = QFrame()
+        self._dev_sep.setFixedHeight(1)
+        self.sidebarLayout.addWidget(self._dev_sep)
+
+        self._dev_label = QLabel("DEVICES")
+        self._dev_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
+        self.sidebarLayout.addWidget(self._dev_label)
+
+        # Device select button (click to pick an iPod)
+        self.deviceButton = QPushButton("Select iPod...")
         self.deviceButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
-        self.rescanButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
+        self.deviceButton.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.sidebarLayout.addWidget(self.deviceButton)
 
-        self.deviceSelectLayout.addWidget(self.deviceButton)
-        self.deviceSelectLayout.addWidget(self.rescanButton)
+        # iPod button (shown after device is selected, clicking switches to iPod view)
+        # Uses _DroppableButton to accept drag & drop from library grid/list
+        self.ipodButton = _DroppableButton("")
+        self.ipodButton.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
+        self.ipodButton.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.ipodButton.clicked.connect(self._on_ipod_clicked)
+        self.ipodButton.items_dropped.connect(self._on_items_dropped)
+        self.ipodButton.hide()
+        self.sidebarLayout.addWidget(self.ipodButton)
 
-        self.sidebarLayout.addLayout(self.deviceSelectLayout)
+        # Rescan button (small, shown when device is connected)
+        self.rescanButton = QPushButton("Rescan")
+        self.rescanButton.setFont(QFont(FONT_FAMILY, 9))
+        self.rescanButton.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.rescanButton.hide()
+        self.sidebarLayout.addWidget(self.rescanButton)
 
-        # Sync button - row 2 (full width)
-        self.syncButton = QPushButton("⇄ Sync with PC")
+        self.sidebarLayout.addStretch()
+
+        # ── Bottom buttons ──
+        self._bottom_sep = QFrame()
+        self._bottom_sep.setFixedHeight(1)
+        self.sidebarLayout.addWidget(self._bottom_sep)
+
+        # Sync button
+        self.syncButton = QPushButton("Sync")
         self.syncButton.setStyleSheet(accent_btn_css())
         self.syncButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self.sidebarLayout.addWidget(self.syncButton)
 
         # Backup button
-        self.backupButton = QPushButton("⬡ Backups")
+        self.backupButton = QPushButton("Backups")
         self.backupButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
-        self.backupButton.setStyleSheet(btn_css(
-            bg=Colors.SURFACE_ALT,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE,
-            padding="8px 12px",
-            extra="text-align: left;",
-        ))
         self.sidebarLayout.addWidget(self.backupButton)
 
-        # Separator
-        self._sidebar_sep = QFrame()
-        self._sidebar_sep.setFixedHeight(1)
-        self.sidebarLayout.addWidget(self._sidebar_sep)
-
-        # Category label
-        self._lib_label = QLabel("LIBRARY")
-        self._lib_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
-        self.sidebarLayout.addWidget(self._lib_label)
-
-        self.buttons = {}
-
-        for category, glyph in category_glyphs.items():
-            btn = QPushButton(f"{glyph} {category}")
-            btn.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
-
-            btn.setStyleSheet(btn_css(
-                bg=Colors.SURFACE_ALT,
-                bg_hover=Colors.SURFACE_ACTIVE,
-                bg_press=Colors.SURFACE,
-                radius=Metrics.BORDER_RADIUS_SM,
-                padding="9px 12px",
-                extra="text-align: left;",
-            ))
-
-            btn.clicked.connect(
-                lambda clicked, category=category: self.selectCategory(category))
-
-            self.sidebarLayout.addWidget(btn)
-            self.buttons[category] = btn
-
-        self.sidebarLayout.addStretch()
-
-        # Settings button at bottom
+        # Settings button
         self.settingsButton = QPushButton("Settings")
         self.settingsButton.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
-        self.settingsButton.setStyleSheet(btn_css(
-            bg="transparent",
-            bg_hover=Colors.SURFACE_RAISED,
-            bg_press=Colors.SURFACE,
-            fg=Colors.TEXT_SECONDARY,
-            padding="8px 12px",
-            extra="text-align: left;",
-        ))
         self.sidebarLayout.addWidget(self.settingsButton)
 
-        self.selectedCategory = list(category_glyphs.keys())[0]
+        # Sync queue
+        self._sync_queue: list[dict] = []
+
+        # Legacy: keep self.buttons and selectedCategory for backward compat
+        self.buttons = {}
+        self.selectedCategory = "Albums"
 
         # Apply initial styles and connect to theme changes
         self._rebuild_sidebar_styles()
         from ..theme import ThemeManager
         ThemeManager.instance().theme_changed.connect(self._rebuild_sidebar_styles)
 
-        self.selectCategory(self.selectedCategory)
+        # Start with Library selected
+        self._highlight_active()
 
     def _rebuild_sidebar_styles(self):
         """Rebuild sidebar styles from current theme palette."""
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
+
         self.setStyleSheet(f"""
             QFrame#sidebar {{
                 background-color: {Colors.SURFACE};
@@ -584,18 +623,29 @@ class Sidebar(QFrame):
                 border-radius: {Metrics.BORDER_RADIUS_LG}px;
             }}
         """)
-        self._sidebar_sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE};")
-        self._lib_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px;")
+        self._dev_sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE};")
+        self._bottom_sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE};")
+        self._lib_label.setStyleSheet(
+            f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px;")
+        self._dev_label.setStyleSheet(
+            f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px;")
 
-        # Rebuild button styles
-        button_style = btn_css(
+        # Button styles
+        self.deviceButton.setStyleSheet(btn_css(
             bg=Colors.SURFACE_RAISED,
             bg_hover=Colors.SURFACE_ACTIVE,
             bg_press=Colors.SURFACE_ALT,
-            padding="7px 0",
-        )
-        self.deviceButton.setStyleSheet(button_style)
-        self.rescanButton.setStyleSheet(button_style)
+            padding="7px 12px",
+            extra="text-align: left;",
+        ))
+        self.rescanButton.setStyleSheet(btn_css(
+            bg="transparent",
+            bg_hover=Colors.SURFACE_RAISED,
+            bg_press=Colors.SURFACE,
+            fg=Colors.TEXT_SECONDARY,
+            padding="4px 12px",
+            extra="text-align: left;",
+        ))
         self.syncButton.setStyleSheet(accent_btn_css())
         self.backupButton.setStyleSheet(btn_css(
             bg=Colors.SURFACE_ALT,
@@ -613,28 +663,76 @@ class Sidebar(QFrame):
             extra="text-align: left;",
         ))
 
-        # Rebuild category button styles
-        for cat, btn in self.buttons.items():
-            if cat == self.selectedCategory:
-                from ..theme import ThemeManager
-                a = ThemeManager.instance().accent
-                btn.setStyleSheet(btn_css(
-                    bg=Colors.ACCENT,
-                    bg_hover=a.rgba(200),
-                    bg_press=a.rgba(160),
-                    radius=Metrics.BORDER_RADIUS_SM,
-                    padding="9px 12px",
-                    extra="text-align: left;",
-                ))
-            else:
-                btn.setStyleSheet(btn_css(
-                    bg=Colors.SURFACE_ALT,
-                    bg_hover=Colors.SURFACE_ACTIVE,
-                    bg_press=Colors.SURFACE,
-                    radius=Metrics.BORDER_RADIUS_SM,
-                    padding="9px 12px",
-                    extra="text-align: left;",
-                ))
+        self._highlight_active()
+
+    def _highlight_active(self):
+        """Apply highlight styles to the active navigation item."""
+        from ..theme import ThemeManager
+        a = ThemeManager.instance().accent
+
+        active_style = btn_css(
+            bg=a.rgba(50),
+            bg_hover=a.rgba(70),
+            bg_press=a.rgba(40),
+            radius=Metrics.BORDER_RADIUS_SM,
+            padding="9px 12px",
+            extra="text-align: left;",
+        )
+        inactive_style = btn_css(
+            bg="transparent",
+            bg_hover=Colors.SURFACE_RAISED,
+            bg_press=Colors.SURFACE,
+            radius=Metrics.BORDER_RADIUS_SM,
+            padding="9px 12px",
+            extra="text-align: left;",
+        )
+
+        if self._active_source == "library":
+            self.libraryButton.setStyleSheet(active_style)
+            self.ipodButton.setStyleSheet(inactive_style)
+        else:
+            self.libraryButton.setStyleSheet(inactive_style)
+            self.ipodButton.setStyleSheet(active_style)
+
+    def _on_library_clicked(self):
+        """User clicked the Library button."""
+        self._active_source = "library"
+        self._highlight_active()
+        self.library_selected.emit()
+
+    def _on_ipod_clicked(self):
+        """User clicked the iPod button in the Devices section."""
+        from ..app import DeviceManager
+        device = DeviceManager.get_instance()
+        if device.device_path:
+            self._active_source = "ipod"
+            self._highlight_active()
+            self.ipod_selected.emit(device.device_path)
+
+    def _on_items_dropped(self, items: list):
+        """Items were dropped onto the iPod button — add to sync queue."""
+        self._sync_queue.extend(items)
+        self._update_sync_badge()
+        self.items_queued.emit(items)
+
+    def _update_sync_badge(self):
+        """Update the Sync button text with queue count badge."""
+        count = len(self._sync_queue)
+        if count > 0:
+            self.syncButton.setText(f"Sync ({count})")
+        else:
+            self.syncButton.setText("Sync")
+
+    def get_sync_queue(self) -> list[dict]:
+        """Return the current sync queue."""
+        return list(self._sync_queue)
+
+    def clear_sync_queue(self):
+        """Clear the sync queue and reset badge."""
+        self._sync_queue.clear()
+        self._update_sync_badge()
+
+    # ── Public API (backwards compatible) ──
 
     def updateDeviceInfo(self, name: str, model: str, tracks: int, albums: int,
                          size_bytes: int, duration_ms: int,
@@ -645,36 +743,25 @@ class Sidebar(QFrame):
         self.device_card.update_stats(tracks, albums, size_bytes, duration_ms)
         if db_version_hex:
             self.device_card.update_database_info(db_version_hex, db_version_name, db_id)
+        self.device_card.show()
+
+        # Update the iPod button in Devices section
+        self.ipodButton.setText(name)
+        self.ipodButton.show()
+        self.rescanButton.show()
 
     def clearDeviceInfo(self):
         """Clear device info when no device is selected."""
         self.device_card.clear()
+        self.device_card.hide()
+        self.ipodButton.hide()
+        self.rescanButton.hide()
 
     def updateDeviceButton(self, device_name: str):
         """Update the device button text to show selected device."""
-        self.deviceButton.setText("▸ Device")
+        self.deviceButton.setText("Select iPod...")
 
     def selectCategory(self, category):
-        # Reset the previous selected button's style
-        self.buttons[self.selectedCategory].setStyleSheet(btn_css(
-            bg=Colors.SURFACE_ALT,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE,
-            radius=Metrics.BORDER_RADIUS_SM,
-            padding="9px 12px",
-            extra="text-align: left;",
-        ))
-
+        """Legacy method — categories are now in the tab bar."""
         self.selectedCategory = category
-        # set the selected button's style
-        from ..theme import ThemeManager
-        a = ThemeManager.instance().accent
-        self.buttons[self.selectedCategory].setStyleSheet(btn_css(
-            bg=Colors.ACCENT,
-            bg_hover=a.rgba(200),
-            bg_press=a.rgba(160),
-            radius=Metrics.BORDER_RADIUS_SM,
-            padding="9px 12px",
-            extra="text-align: left;",
-        ))
         self.category_changed.emit(category)
