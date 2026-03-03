@@ -12,7 +12,7 @@ import logging
 from typing import Callable
 
 import json
-from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint, QMimeData
+from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint, QMimeData, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QColor, QCursor, QKeyEvent, QWheelEvent, QMouseEvent, QDrag
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -137,7 +137,8 @@ COLUMN_CONFIG: dict[str, tuple[str, Callable[[int], str] | None]] = {
     "lastPlayed": ("Last Played", format_date),
     "bpm": ("BPM", None),
     "Composer": ("Composer", None),
-    "filetype": ("Format", None),
+    "filetype": ("Format (raw)", None),
+    "_format": ("Format", None),
     # ── New columns from parser improvements ──
     "lastModified": ("Modified", format_date),
     "lastSkipped": ("Last Skipped", format_date),
@@ -160,7 +161,7 @@ COLUMN_CONFIG: dict[str, tuple[str, Callable[[int], str] | None]] = {
 
 # Preferred column order when displaying tracks
 PREFERRED_COLUMN_ORDER = [
-    "Title", "Artist", "Album", "Album Artist", "Genre",
+    "Title", "Artist", "Album", "Album Artist", "Genre", "_format",
     "year", "length", "rating", "playCount", "skipCount",
     "trackNumber", "discNumber", "bitrate", "dateAdded", "lastPlayed",
     "lastModified", "lastSkipped", "dateReleased", "mediaType",
@@ -170,7 +171,7 @@ PREFERRED_COLUMN_ORDER = [
 ]
 
 # Default columns shown when no specific selection
-DEFAULT_COLUMNS = ["Title", "Artist", "Album", "Genre", "length", "rating", "playCount"]
+DEFAULT_COLUMNS = ["Title", "Artist", "Album", "Genre", "_format", "length", "rating", "playCount"]
 
 # Columns that should be right-aligned (numeric)
 NUMERIC_COLUMNS = frozenset({
@@ -225,6 +226,8 @@ class MusicBrowserList(QFrame):
     Uses incremental loading for large datasets (>500 tracks) to maintain
     UI responsiveness. Robust against rapid user interactions.
     """
+
+    track_play_requested = pyqtSignal(dict, list)  # (track, queue)
 
     def __init__(self):
         super().__init__()
@@ -339,6 +342,9 @@ class MusicBrowserList(QFrame):
         # Right-click context menu on track rows
         t.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         t.customContextMenuRequested.connect(self._on_track_context_menu)
+
+        # Double-click to play
+        t.cellDoubleClicked.connect(self._on_cell_double_clicked)
 
         t.setStyleSheet(f"""
             QTableWidget {{
@@ -714,6 +720,10 @@ class MusicBrowserList(QFrame):
         for track in self._tracks[:100]:
             available_keys.update(track.keys())
 
+        # Synthetic columns that are always available (computed, not in track dict)
+        _SYNTHETIC_COLUMNS = {"_format"}
+        available_keys.update(_SYNTHETIC_COLUMNS)
+
         # If user has a saved column order, respect it (filtering out unavailable)
         if self._user_col_order is not None:
             base = [k for k in self._user_col_order
@@ -885,10 +895,14 @@ class MusicBrowserList(QFrame):
                     art_item.setData(Qt.ItemDataRole.UserRole, mhii_link)
 
         for col, key in enumerate(columns):
-            # Playlist position is synthetic — not from track dict
+            # Synthetic columns — not from track dict
             if key == "_pl_pos":
                 display = str(row + 1)
                 raw_value: int | float | str = row + 1
+            elif key == "_format":
+                from .formatters import get_format_tag
+                display = get_format_tag(track)
+                raw_value = display
             else:
                 raw_value = track.get(key, "")
                 display = self._format_value(key, raw_value)
@@ -1342,6 +1356,17 @@ class MusicBrowserList(QFrame):
     # -------------------------------------------------------------------------
     # Track Context Menu (right-click on rows)
     # -------------------------------------------------------------------------
+
+    def _on_cell_double_clicked(self, row: int, col: int) -> None:
+        """Handle double-click on a table row — emit play request."""
+        first_data_col = 1 if self._show_art else 0
+        item = self.table.item(row, first_data_col)
+        if item is None:
+            return
+        orig_idx = item.data(Qt.ItemDataRole.UserRole + 1)
+        if orig_idx is not None and 0 <= orig_idx < len(self._tracks):
+            track = self._tracks[orig_idx]
+            self.track_play_requested.emit(track, list(self._tracks))
 
     def _get_selected_tracks(self) -> list[dict]:
         """Return track dicts for all currently selected rows."""

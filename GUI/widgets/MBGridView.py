@@ -19,6 +19,7 @@ class MusicBrowserGrid(QFrame):
     an AlbumExpanderPanel below that row.
     """
     item_selected = pyqtSignal(dict)  # Emits when an item is clicked
+    track_play_requested = pyqtSignal(dict, list)  # Relayed from expander
 
     def __init__(self):
         super().__init__()
@@ -42,6 +43,7 @@ class MusicBrowserGrid(QFrame):
         # Expansion state
         self._expander = AlbumExpanderPanel(self)
         self._expander.close_requested.connect(self.collapseExpander)
+        self._expander.track_play_requested.connect(self.track_play_requested.emit)
         self._expanded_item_index: int = -1  # Index in self.gridItems, -1 = collapsed
         self._cache = None  # Active cache reference for track lookups
 

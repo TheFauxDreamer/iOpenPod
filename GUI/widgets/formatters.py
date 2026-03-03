@@ -43,6 +43,41 @@ def format_duration_human(ms: int) -> str:
     return f"{minutes:.0f} min"
 
 
+# ── Format tag helpers ─────────────────────────────────────────────────────
+
+# Map verbose iPod filetype strings to short tags
+_FILETYPE_SHORT = {
+    "MP3": "MP3",
+    "Apple Lossless / AAC": "M4A",
+    "Protected AAC": "M4P",
+    "Audiobook": "M4B",
+    "WAV": "WAV",
+    "AIFF": "AIFF",
+    "AAC": "AAC",
+}
+
+
+def get_format_tag(track: dict) -> str:
+    """Return a short uppercase format tag (e.g. 'FLAC', 'MP3', 'M4A').
+
+    Works with both PC tracks (_pc_extension) and iPod tracks (filetype).
+    """
+    ext = track.get("_pc_extension", "")
+    if ext:
+        return ext.upper()
+    ft = track.get("filetype", "")
+    if not ft:
+        return ""
+    return _FILETYPE_SHORT.get(ft, ft.upper())
+
+
+def get_album_format_tag(tracks: list[dict]) -> str:
+    """If all tracks share one format, return it; otherwise ''."""
+    tags = set(get_format_tag(t) for t in tracks)
+    tags.discard("")
+    return tags.pop() if len(tags) == 1 else ""
+
+
 def format_rating(rating: int) -> str:
     """Format rating (0-100) as stars (★☆). Returns empty string for 0."""
     if not rating or rating <= 0:

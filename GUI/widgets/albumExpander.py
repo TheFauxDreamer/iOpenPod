@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..styles import Colors, FONT_FAMILY, Metrics
-from .formatters import format_duration_mmss
+from .formatters import format_duration_mmss, get_format_tag, get_album_format_tag
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +29,11 @@ class AlbumExpanderPanel(QFrame):
     """Inline panel showing album details, inserted below a grid row."""
 
     close_requested = pyqtSignal()
+    track_play_requested = pyqtSignal(dict, list)  # (track, queue)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._current_tracks: list[dict] = []
         self.setMinimumHeight(_PANEL_MIN_H)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._bg_color = (40, 40, 40)
@@ -106,6 +108,7 @@ class AlbumExpanderPanel(QFrame):
                    text_secondary: str | None = None):
         """Populate the panel for a single album."""
         self._current_item_data = item_data
+        self._current_tracks = list(tracks)
 
         # Set colours
         if bg_color:
@@ -160,8 +163,11 @@ class AlbumExpanderPanel(QFrame):
             key=lambda t: (t.get("discNumber", 0), t.get("trackNumber", 0)),
         )
 
+        # Show per-track format tags only when the album has mixed formats
+        show_format = not get_album_format_tag(sorted_tracks)
+
         for track in sorted_tracks:
-            row = self._make_track_row(track)
+            row = self._make_track_row(track, show_format=show_format)
             self._track_list.addWidget(row)
 
         # Adjust height based on content
@@ -173,6 +179,8 @@ class AlbumExpanderPanel(QFrame):
     def show_artist(self, artist: str, albums_with_tracks: list[tuple[dict, list[dict]]]):
         """Show artist view with tracks grouped by album."""
         self._current_item_data = {"title": artist, "category": "Artists"}
+        # Flatten all tracks for the play queue
+        self._current_tracks = [t for _, tracks in albums_with_tracks for t in tracks]
 
         # Use the first album's colors if available
         first_album = albums_with_tracks[0][0] if albums_with_tracks else {}
@@ -226,8 +234,9 @@ class AlbumExpanderPanel(QFrame):
                 tracks,
                 key=lambda t: (t.get("discNumber", 0), t.get("trackNumber", 0)),
             )
+            show_format = not get_album_format_tag(sorted_tracks)
             for track in sorted_tracks:
-                row = self._make_track_row(track)
+                row = self._make_track_row(track, show_format=show_format)
                 self._track_list.addWidget(row)
             total_tracks += len(sorted_tracks)
 
@@ -263,10 +272,14 @@ class AlbumExpanderPanel(QFrame):
             border-radius: 14px;
         """)
 
-    def _make_track_row(self, track: dict) -> QWidget:
+    def _make_track_row(self, track: dict, show_format: bool = False) -> QWidget:
         """Create a single track row widget."""
         row = QFrame()
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
         row.setFixedHeight(_TRACK_ROW_H)
+        # Click to play: emit signal with this track + all tracks in current view
+        row.mousePressEvent = lambda e, t=track: self.track_play_requested.emit(
+            t, self._current_tracks)
         row.setStyleSheet(f"""
             QFrame {{
                 background: transparent;
@@ -298,6 +311,19 @@ class AlbumExpanderPanel(QFrame):
         title_label.setStyleSheet(
             f"color: {self._text_color}; background: transparent; border: none;")
         layout.addWidget(title_label, 1)
+
+        # Format tag (only shown for mixed-format albums)
+        if show_format:
+            fmt = get_format_tag(track)
+            if fmt:
+                fmt_label = QLabel(fmt)
+                fmt_label.setFixedWidth(40)
+                fmt_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+                fmt_label.setFont(QFont(FONT_FAMILY, 8))
+                fmt_label.setStyleSheet(
+                    f"color: {self._text_secondary_color}; background: rgba(255,255,255,8);"
+                    f" border: none; border-radius: 3px; padding: 1px 4px;")
+                layout.addWidget(fmt_label)
 
         # Duration
         duration = track.get("length", 0)

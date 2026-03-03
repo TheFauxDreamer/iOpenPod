@@ -13,8 +13,10 @@ from GUI.widgets.sidebar import Sidebar
 from GUI.widgets.syncReview import SyncReviewWidget, SyncWorker, PCFolderDialog, SyncExecuteWorker
 from GUI.widgets.settingsPage import SettingsPage
 from GUI.widgets.backupBrowser import BackupBrowserWidget
+from GUI.widgets.miniPlayer import MiniPlayer
 from GUI.settings import get_settings
 from GUI.notifications import Notifier
+from GUI.player import AudioPlayer
 from GUI.styles import Colors, FONT_FAMILY, btn_css
 import threading
 
@@ -935,11 +937,15 @@ def build_album_list(cache) -> list:
             # Calculate total album duration
             total_length_ms = sum(t.get("length", 0) for t in matching_tracks)
 
-        # Build subtitle: "Artist • Year • N tracks"
+        # Build subtitle: "Artist • Year • N tracks • FORMAT"
+        from GUI.widgets.formatters import get_album_format_tag
+        format_tag = get_album_format_tag(matching_tracks) if matching_tracks else ""
         subtitle_parts = [artist]
         if year and year > 0:
             subtitle_parts.append(str(year))
         subtitle_parts.append(f"{track_count} tracks")
+        if format_tag:
+            subtitle_parts.append(format_tag)
         subtitle = " · ".join(subtitle_parts)
 
         items.append({
@@ -950,6 +956,7 @@ def build_album_list(cache) -> list:
             "year": year,
             "mhiiLink": mhiiLink,
             "_pc_art_hash": pc_art_hash,
+            "_format_tag": format_tag,
             "category": "Albums",
             "filter_key": "Album",
             "filter_value": album,
@@ -979,13 +986,17 @@ def build_artist_list(cache) -> list:
         # Total plays
         total_plays = sum(t.get("playCount", 0) for t in tracks)
 
-        # Build subtitle: "N albums · M tracks" or add plays if any
+        # Build subtitle: "N albums · M tracks · FORMAT" or add plays if any
+        from GUI.widgets.formatters import get_album_format_tag
+        format_tag = get_album_format_tag(tracks)
         subtitle_parts = []
         if album_count > 1:
             subtitle_parts.append(f"{album_count} albums")
         subtitle_parts.append(f"{track_count} tracks")
         if total_plays > 0:
             subtitle_parts.append(f"{total_plays} plays")
+        if format_tag:
+            subtitle_parts.append(format_tag)
         subtitle = " · ".join(subtitle_parts)
 
         items.append({
@@ -1024,13 +1035,17 @@ def build_genre_list(cache) -> list:
         total_length_ms = sum(t.get("length", 0) for t in tracks)
         total_hours = total_length_ms / (1000 * 60 * 60)
 
-        # Build subtitle: "N artists · M tracks · X.X hours"
+        # Build subtitle: "N artists · M tracks · X.X hours · FORMAT"
+        from GUI.widgets.formatters import get_album_format_tag
+        format_tag = get_album_format_tag(tracks)
         subtitle_parts = []
         if artist_count > 1:
             subtitle_parts.append(f"{artist_count} artists")
         subtitle_parts.append(f"{track_count} tracks")
         if total_hours >= 1:
             subtitle_parts.append(f"{total_hours:.1f} hours")
+        if format_tag:
+            subtitle_parts.append(format_tag)
 
         items.append({
             "title": genre,
@@ -1055,9 +1070,17 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("iOpenPod")
         self.setGeometry(100, 100, 1280, 720)
 
-        # Central widget with stacked layout for main/sync views
+        # Central widget: stacked views + persistent mini player at bottom
         self.centralStack = QStackedWidget()
-        self.setCentralWidget(self.centralStack)
+        self.miniPlayer = MiniPlayer()
+
+        _container = QWidget()
+        _vbox = QVBoxLayout(_container)
+        _vbox.setContentsMargins(0, 0, 0, 0)
+        _vbox.setSpacing(0)
+        _vbox.addWidget(self.centralStack, 1)
+        _vbox.addWidget(self.miniPlayer)
+        self.setCentralWidget(_container)
 
         # Main browsing view
         self.mainWidget = QWidget()
@@ -1140,6 +1163,16 @@ class MainWindow(QMainWindow):
         self._pc_cache.scan_progress.connect(self._onPCScanProgress)
         self._scan_progress_dialog: _ScanProgressDialog | None = None
 
+        # Initialize audio player and connect to mini player
+        self._audio_player = AudioPlayer.get_instance()
+        self.miniPlayer.connect_player(self._audio_player)
+
+        # Connect play requests from music browser views
+        self.musicBrowser.browserTrack.track_play_requested.connect(
+            self._onTrackPlayRequested)
+        self.musicBrowser.browserGrid.track_play_requested.connect(
+            self._onTrackPlayRequested)
+
         # Default to Library view and start PC scan if music folder is set
         self.musicBrowser.setDataSource("library")
         if settings.music_folder and not self._pc_cache.is_ready() and not self._pc_cache.is_loading():
@@ -1209,6 +1242,10 @@ class MainWindow(QMainWindow):
                     "  <selected folder>/iPod_Control/iTunes/\n\n"
                     "Please select the root folder of your iPod."
                 )
+
+    def _onTrackPlayRequested(self, track: dict, queue: list):
+        """Handle play request from any music view."""
+        self._audio_player.play_track(track, queue=queue)
 
     def _onPCLibraryReady(self):
         """Called when PC library has data available (may be partial)."""
