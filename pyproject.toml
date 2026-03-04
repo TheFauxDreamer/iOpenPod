@@ -25,7 +25,6 @@ classifiers = [
 dependencies = [
     "dearpygui>=2.0.0,<3.0.0",
     "pyqt6>=6.9.1,<7.0.0",
-    "PyQt6-Multimedia>=6.9.1,<7.0.0",
     "numpy>=2.3.0,<3.0.0",
     "pillow>=11.2.1,<12.0.0",
     "pycryptodome>=3.20.0,<4.0.0",
