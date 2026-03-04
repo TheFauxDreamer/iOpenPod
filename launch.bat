@@ -39,15 +39,21 @@ if %errorlevel% neq 0 (
     echo.
 )
 
-REM Sync dependencies
+REM Sync dependencies (retry once — first run on Windows can fail while venv is being created)
 echo Syncing dependencies...
 python -m uv sync
 if %errorlevel% neq 0 (
     echo.
-    echo [ERROR] Failed to sync dependencies.
+    echo Retrying sync...
     echo.
-    pause
-    exit /b 1
+    python -m uv sync
+    if %errorlevel% neq 0 (
+        echo.
+        echo [ERROR] Failed to sync dependencies.
+        echo.
+        pause
+        exit /b 1
+    )
 )
 echo.
 
