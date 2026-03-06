@@ -969,10 +969,13 @@ class PCLibrary:
                 if val and len(val) > 0:
                     metadata[meta_key] = str(val[0])
 
-            # Compilation flag
+            # Compilation flag (cpil may be a bare bool or a list)
             cpil = audio.tags.get("cpil")
-            if cpil and len(cpil) > 0:
-                metadata["compilation"] = bool(cpil[0])
+            if cpil is not None:
+                if isinstance(cpil, bool):
+                    metadata["compilation"] = cpil
+                elif len(cpil) > 0:
+                    metadata["compilation"] = bool(cpil[0])
 
             # Composer
             wrt = audio.tags.get("\xa9wrt")
@@ -1042,14 +1045,18 @@ class PCLibrary:
                 except (ValueError, TypeError):
                     pass
 
-            # pcst: Podcast flag atom (boolean, present = podcast)
+            # pcst: Podcast flag atom (may be a bare bool or a list)
             pcst = audio.tags.get("pcst")
-            if pcst and len(pcst) > 0:
-                try:
-                    if int(pcst[0]):
+            if pcst is not None:
+                if isinstance(pcst, bool):
+                    if pcst:
                         metadata["is_podcast"] = True
-                except (ValueError, TypeError):
-                    pass
+                elif len(pcst) > 0:
+                    try:
+                        if int(pcst[0]):
+                            metadata["is_podcast"] = True
+                    except (ValueError, TypeError):
+                        pass
 
             # catg: Category (podcasts/audiobooks)
             catg = audio.tags.get("catg")
