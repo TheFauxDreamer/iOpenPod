@@ -7,7 +7,7 @@ and volume slider.  Hidden when nothing is playing.
 
 import logging
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QFont, QPixmap, QIcon, QImage
+from PyQt6.QtGui import QFont, QPixmap, QIcon, QImage, QColor
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QSlider, QSizePolicy, QWidget,
@@ -20,6 +20,26 @@ log = logging.getLogger(__name__)
 
 _ART_SIZE = 48
 _PLAYER_HEIGHT = 64
+
+# ── SVG transport icons (24x24 viewBox) ──────────────────────
+_SVG_PREV = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="3" height="16" fill="{c}"/><polygon points="20,3 8,12 20,21" fill="{c}"/></svg>'
+_SVG_PLAY = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21" fill="{c}"/></svg>'
+_SVG_PAUSE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="5" y="3" width="4" height="18" fill="{c}"/><rect x="15" y="3" width="4" height="18" fill="{c}"/></svg>'
+_SVG_NEXT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="4,3 16,12 4,21" fill="{c}"/><rect x="18" y="4" width="3" height="16" fill="{c}"/></svg>'
+
+
+def _svg_icon(svg_template: str, color: str, size: int = 24) -> QIcon:
+    """Render an SVG template with the given fill color to a QIcon."""
+    svg_data = svg_template.format(c=color).encode("utf-8")
+    img = QImage.fromData(svg_data, "SVG")
+    if img.isNull():
+        return QIcon()
+    pix = QPixmap.fromImage(img).scaled(
+        size, size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    return QIcon(pix)
 
 
 class MiniPlayer(QFrame):
@@ -99,15 +119,18 @@ class MiniPlayer(QFrame):
         btn_row.setSpacing(12)
         btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._prev_btn = QPushButton("\u23EE")
-        self._play_btn = QPushButton("\u25B6")
-        self._next_btn = QPushButton("\u23ED")
+        self._prev_btn = QPushButton()
+        self._play_btn = QPushButton()
+        self._next_btn = QPushButton()
 
         for btn in (self._prev_btn, self._play_btn, self._next_btn):
             btn.setFixedSize(32, 32)
+            btn.setIconSize(QSize(18, 18))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFont(QFont(FONT_FAMILY, 14))
             btn_row.addWidget(btn)
+
+        self._is_playing = False
+        self._update_transport_icons()
 
         center_col.addLayout(btn_row)
 
@@ -221,6 +244,17 @@ class MiniPlayer(QFrame):
             border: none;
         """)
 
+        self._update_transport_icons()
+
+    def _update_transport_icons(self):
+        """Rebuild transport button icons using the current theme color."""
+        c = Colors.TEXT_PRIMARY
+        self._prev_btn.setIcon(_svg_icon(_SVG_PREV, c))
+        self._play_btn.setIcon(
+            _svg_icon(_SVG_PAUSE, c) if self._is_playing
+            else _svg_icon(_SVG_PLAY, c))
+        self._next_btn.setIcon(_svg_icon(_SVG_NEXT, c))
+
     # ── Signal Handlers ───────────────────────────────────────
 
     def _on_track_changed(self, track: dict):
@@ -234,10 +268,8 @@ class MiniPlayer(QFrame):
         self.show()
 
     def _on_state_changed(self, state: str):
-        if state == "playing":
-            self._play_btn.setText("\u23F8")
-        else:
-            self._play_btn.setText("\u25B6")
+        self._is_playing = (state == "playing")
+        self._update_transport_icons()
 
     def _on_position_changed(self, ms: int):
         if not self._seeking:
