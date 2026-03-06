@@ -124,26 +124,12 @@ class ComboRow(SettingRow):
         self.combo = QComboBox()
         self.combo.setFixedWidth(130)
         self.combo.setFont(QFont(FONT_FAMILY, 10))
-        self._rebuild_combo_style()
-        if options:
-            self.combo.addItems(options)
-        if current:
-            idx = self.combo.findText(current)
-            if idx >= 0:
-                self.combo.setCurrentIndex(idx)
-        self.combo.currentTextChanged.connect(self.changed.emit)
-        self.add_control(self.combo)
-
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_combo_style)
-
-    def _rebuild_combo_style(self):
         self.combo.setStyleSheet(f"""
             QComboBox {{
                 background: {Colors.SURFACE_RAISED};
                 border: 1px solid {Colors.BORDER};
                 border-radius: {Metrics.BORDER_RADIUS_SM}px;
-                color: {Colors.TEXT_PRIMARY};
+                color: white;
                 padding: 5px 10px;
             }}
             QComboBox:hover {{
@@ -158,8 +144,8 @@ class ComboRow(SettingRow):
                 border: none;
             }}
             QComboBox QAbstractItemView {{
-                background: {Colors.MENU_BG};
-                color: {Colors.TEXT_PRIMARY};
+                background: #2a2a3a;
+                color: white;
                 selection-background-color: {Colors.ACCENT};
                 border: 1px solid {Colors.BORDER};
                 border-radius: 4px;
@@ -167,6 +153,14 @@ class ComboRow(SettingRow):
                 outline: none;
             }}
         """)
+        if options:
+            self.combo.addItems(options)
+        if current:
+            idx = self.combo.findText(current)
+            if idx >= 0:
+                self.combo.setCurrentIndex(idx)
+        self.combo.currentTextChanged.connect(self.changed.emit)
+        self.add_control(self.combo)
 
     @property
     def value(self) -> str:
@@ -402,64 +396,6 @@ class ToolRow(SettingRow):
         self.status_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
 
 
-class AccentPickerRow(SettingRow):
-    """Setting row with a row of colored circles for accent color selection."""
-
-    changed = pyqtSignal(str)
-
-    def __init__(self, title: str, description: str = "", current: str = "blue"):
-        super().__init__(title, description)
-        from ..theme import ACCENT_PRESETS
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent; border: none;")
-        row = QHBoxLayout(container)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-
-        self._dots: dict[str, QPushButton] = {}
-        for name, hex_color in ACCENT_PRESETS.items():
-            dot = QPushButton()
-            dot.setFixedSize(24, 24)
-            dot.setCursor(Qt.CursorShape.PointingHandCursor)
-            dot.setToolTip(name.capitalize())
-            dot.clicked.connect(lambda checked=False, n=name: self._pick(n))
-            self._dots[name] = dot
-            row.addWidget(dot)
-
-        self._current = current
-        self._restyle()
-        self.add_control(container)
-
-    def _restyle(self):
-        from ..theme import ACCENT_PRESETS
-        for name, dot in self._dots.items():
-            hex_c = ACCENT_PRESETS[name]
-            selected = name == self._current
-            ring = f"border: 2px solid {Colors.TEXT_PRIMARY};" if selected else f"border: 2px solid transparent;"
-            dot.setStyleSheet(f"""
-                QPushButton {{
-                    background: {hex_c};
-                    border-radius: 12px;
-                    {ring}
-                }}
-                QPushButton:hover {{
-                    border: 2px solid {Colors.TEXT_SECONDARY};
-                }}
-            """)
-
-    def _pick(self, name: str):
-        if name == self._current:
-            return
-        self._current = name
-        self._restyle()
-        self.changed.emit(name)
-
-    @property
-    def value(self) -> str:
-        return self._current
-
-
 # ── Main settings page ─────────────────────────────────────────────────────
 
 class SettingsPage(QWidget):
@@ -479,16 +415,26 @@ class SettingsPage(QWidget):
         tb_layout = QHBoxLayout(title_bar)
         tb_layout.setContentsMargins(24, 16, 24, 8)
 
-        self._back_btn = QPushButton("← Back")
-        self._back_btn.setFont(QFont(FONT_FAMILY, 11))
-        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._back_btn.clicked.connect(self._on_close)
-        tb_layout.addWidget(self._back_btn)
+        back_btn = QPushButton("← Back")
+        back_btn.setFont(QFont(FONT_FAMILY, 11))
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.ACCENT};
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
+        """)
+        back_btn.clicked.connect(self._on_close)
+        tb_layout.addWidget(back_btn)
 
-        self._title = QLabel("Settings")
-        self._title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
-        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tb_layout.addWidget(self._title, stretch=1)
+        title = QLabel("Settings")
+        title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tb_layout.addWidget(title, stretch=1)
 
         # Spacer to balance the back button
         spacer = QWidget()
@@ -559,6 +505,24 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.write_back)
 
+        self.compute_sound_check = ToggleRow(
+            "Compute Sound Check",
+            "Analyze loudness of files missing ReplayGain/iTunNORM tags using ffmpeg, "
+            "then write the result back into your PC files and sync to iPod. "
+            "Sound Check values are always synced to iPod regardless of this setting.",
+        )
+        layout.addWidget(self.compute_sound_check)
+
+        self.rating_strategy = ComboRow(
+            "Rating Conflict Strategy",
+            "How to resolve rating conflicts when iPod and PC ratings differ. "
+            "iPod/PC Wins uses that source (falling back to the other if zero). "
+            "Highest/Lowest picks the max/min non-zero value. Average rounds to the nearest star.",
+            options=["iPod Wins", "PC Wins", "Highest", "Lowest", "Average"],
+            current="iPod Wins",
+        )
+        layout.addWidget(self.rating_strategy)
+
         # ── TRANSCODING section ─────────────────────────────────────────────
         layout.addWidget(self._section_label("TRANSCODING"))
 
@@ -571,13 +535,22 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.aac_bitrate)
 
-        self.transcode_timeout = ComboRow(
-            "Transcode Timeout",
-            "Maximum time to wait for FFmpeg per file. Increase for large FLAC files on slower machines.",
-            options=["2 minutes", "5 minutes", "10 minutes", "30 minutes"],
-            current="5 minutes",
+        self.video_crf = ComboRow(
+            "Video Quality (CRF)",
+            "Quality level for H.264 video transcodes. Lower CRF = better quality but larger files. "
+            "Resolution and codec are always forced to iPod-compatible values.",
+            options=["18 (High)", "20 (Good)", "23 (Balanced)", "26 (Low)", "28 (Very Low)"],
+            current="23 (Balanced)",
         )
-        layout.addWidget(self.transcode_timeout)
+        layout.addWidget(self.video_crf)
+
+        self.video_preset = ComboRow(
+            "Video Encode Speed",
+            "Slower presets produce slightly better quality at the same CRF, but take much longer.",
+            options=["ultrafast", "veryfast", "fast", "medium", "slow"],
+            current="fast",
+        )
+        layout.addWidget(self.video_preset)
 
         self.sync_workers = ComboRow(
             "Parallel Workers",
@@ -590,28 +563,6 @@ class SettingsPage(QWidget):
 
         # ── APPEARANCE section ──────────────────────────────────────────────
         layout.addWidget(self._section_label("APPEARANCE"))
-
-        self.theme_mode = ComboRow(
-            "Theme",
-            "Choose dark, light, or follow your system preference.",
-            options=["Dark", "Light", "System"],
-            current="Dark",
-        )
-        layout.addWidget(self.theme_mode)
-
-        self.accent_color = AccentPickerRow(
-            "Accent Color",
-            "Highlight color used throughout the interface.",
-            current="blue",
-        )
-        layout.addWidget(self.accent_color)
-
-        self.colorful_albums = ToggleRow(
-            "Colorful Albums",
-            "Tint the track list with the album artwork's dominant color (iTunes 11 style).",
-            checked=True,
-        )
-        layout.addWidget(self.colorful_albums)
 
         self.show_art = ToggleRow(
             "Track List Artwork",
@@ -637,6 +588,13 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.settings_dir)
 
+        self.log_dir = FolderRow(
+            "Log Location",
+            "Where iOpenPod writes log files and crash reports. "
+            "Leave empty for the platform default. Takes effect on next launch.",
+        )
+        layout.addWidget(self.log_dir)
+
         self.reset_cache_dir_btn = QPushButton("Reset to Default")
         self.reset_cache_dir_btn.setFont(QFont(FONT_FAMILY, 9))
         self.reset_cache_dir_btn.setFixedWidth(130)
@@ -649,7 +607,7 @@ class SettingsPage(QWidget):
             border=f"1px solid {Colors.BORDER}",
             padding="4px 8px",
         ))
-        self.reset_cache_dir_btn.setToolTip("Clear both custom paths and use platform defaults")
+        self.reset_cache_dir_btn.setToolTip("Clear all custom paths and use platform defaults")
         self.reset_cache_dir_btn.clicked.connect(self._reset_storage_defaults)
         layout.addWidget(self.reset_cache_dir_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
@@ -684,42 +642,10 @@ class SettingsPage(QWidget):
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
-        # Apply initial styles and connect to theme changes
-        self._rebuild_page_styles()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_page_styles)
-
-    def _rebuild_page_styles(self):
-        """Rebuild settings page styles from current theme palette."""
-        self._back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.ACCENT};
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
-        """)
-        self._title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
-        self.reset_cache_dir_btn.setStyleSheet(btn_css(
-            bg=Colors.SURFACE,
-            bg_hover=Colors.SURFACE_RAISED,
-            bg_press=Colors.SURFACE_ALT,
-            fg=Colors.TEXT_SECONDARY,
-            border=f"1px solid {Colors.BORDER}",
-            padding="4px 8px",
-        ))
-        for label in getattr(self, '_section_labels', []):
-            label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
-
     def _section_label(self, text: str) -> QLabel:
         label = QLabel(text)
         label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
         label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
-        # Track section labels for theme rebuilding
-        if not hasattr(self, '_section_labels'):
-            self._section_labels = []
-        self._section_labels.append(label)
         return label
 
     def load_from_settings(self):
@@ -729,25 +655,27 @@ class SettingsPage(QWidget):
 
         self.music_folder.value = s.music_folder
         self.write_back.value = s.write_back_to_pc
+        self.compute_sound_check.value = s.compute_sound_check
+
+        # Rating conflict strategy
+        strategy_display = {
+            "ipod_wins": "iPod Wins", "pc_wins": "PC Wins",
+            "highest": "Highest", "lowest": "Lowest", "average": "Average",
+        }
+        rs_text = strategy_display.get(s.rating_conflict_strategy, "iPod Wins")
+        idx = self.rating_strategy.combo.findText(rs_text)
+        if idx >= 0:
+            self.rating_strategy.combo.setCurrentIndex(idx)
+
         self.show_art.value = s.show_art_in_tracklist
-        self.colorful_albums.value = s.colorful_albums
         self.transcode_cache_dir.value = s.transcode_cache_dir
         self.settings_dir.value = s.settings_dir
+        self.log_dir.value = s.log_dir
         self.ffmpeg_path.value = s.ffmpeg_path
         self.fpcalc_path.value = s.fpcalc_path
 
         self.backup_dir.value = s.backup_dir
         self.backup_before_sync.value = s.backup_before_sync
-
-        # Theme mode
-        mode_map = {"dark": "Dark", "light": "Light", "system": "System"}
-        idx = self.theme_mode.combo.findText(mode_map.get(s.theme_mode, "Dark"))
-        if idx >= 0:
-            self.theme_mode.combo.setCurrentIndex(idx)
-
-        # Accent color
-        self.accent_color._current = s.accent_color
-        self.accent_color._restyle()
 
         # Refresh tool status indicators
         self._refresh_tool_status()
@@ -766,12 +694,17 @@ class SettingsPage(QWidget):
         if idx >= 0:
             self.aac_bitrate.combo.setCurrentIndex(idx)
 
-        # Transcode timeout → combo text
-        timeout_map = {120: "2 minutes", 300: "5 minutes", 600: "10 minutes", 1800: "30 minutes"}
-        tt_text = timeout_map.get(s.transcode_timeout, "5 minutes")
-        idx = self.transcode_timeout.combo.findText(tt_text)
+        # Video CRF → combo text
+        crf_map = {18: "18 (High)", 20: "20 (Good)", 23: "23 (Balanced)", 26: "26 (Low)", 28: "28 (Very Low)"}
+        crf_text = crf_map.get(s.video_crf, "23 (Balanced)")
+        idx = self.video_crf.combo.findText(crf_text)
         if idx >= 0:
-            self.transcode_timeout.combo.setCurrentIndex(idx)
+            self.video_crf.combo.setCurrentIndex(idx)
+
+        # Video preset → combo text
+        idx = self.video_preset.combo.findText(s.video_preset)
+        if idx >= 0:
+            self.video_preset.combo.setCurrentIndex(idx)
 
         # Sync workers → combo text
         workers_map = {0: "Auto", 1: "1", 2: "2", 4: "4", 6: "6", 8: "8"}
@@ -785,15 +718,16 @@ class SettingsPage(QWidget):
             self._signals_connected = True
             self.music_folder.changed.connect(self._save)
             self.write_back.changed.connect(self._save)
+            self.compute_sound_check.changed.connect(self._save)
+            self.rating_strategy.changed.connect(self._save)
             self.aac_bitrate.changed.connect(self._save)
-            self.transcode_timeout.changed.connect(self._save)
+            self.video_crf.changed.connect(self._save)
+            self.video_preset.changed.connect(self._save)
             self.sync_workers.changed.connect(self._save)
             self.show_art.changed.connect(self._save)
-            self.colorful_albums.changed.connect(self._save)
-            self.theme_mode.changed.connect(self._on_theme_changed)
-            self.accent_color.changed.connect(self._on_accent_changed)
             self.transcode_cache_dir.changed.connect(self._save)
             self.settings_dir.changed.connect(self._save)
+            self.log_dir.changed.connect(self._save)
             self.ffmpeg_path.changed.connect(self._save_and_refresh_tools)
             self.fpcalc_path.changed.connect(self._save_and_refresh_tools)
             self.backup_dir.changed.connect(self._save)
@@ -807,21 +741,23 @@ class SettingsPage(QWidget):
 
         s.music_folder = self.music_folder.value
         s.write_back_to_pc = self.write_back.value
+        s.compute_sound_check = self.compute_sound_check.value
+
+        # Rating conflict strategy
+        strategy_keys = {
+            "iPod Wins": "ipod_wins", "PC Wins": "pc_wins",
+            "Highest": "highest", "Lowest": "lowest", "Average": "average",
+        }
+        s.rating_conflict_strategy = strategy_keys.get(self.rating_strategy.value, "ipod_wins")
+
         s.show_art_in_tracklist = self.show_art.value
-        s.colorful_albums = self.colorful_albums.value
         s.transcode_cache_dir = self.transcode_cache_dir.value
         s.settings_dir = self.settings_dir.value
+        s.log_dir = self.log_dir.value
         s.ffmpeg_path = self.ffmpeg_path.value
         s.fpcalc_path = self.fpcalc_path.value
         s.backup_dir = self.backup_dir.value
         s.backup_before_sync = self.backup_before_sync.value
-
-        # Theme mode
-        mode_rmap = {"Dark": "dark", "Light": "light", "System": "system"}
-        s.theme_mode = mode_rmap.get(self.theme_mode.value, "dark")
-
-        # Accent color
-        s.accent_color = self.accent_color.value
 
         # Parse max backups
         mb_text = self.max_backups.value
@@ -831,10 +767,15 @@ class SettingsPage(QWidget):
         br_text = self.aac_bitrate.value
         s.aac_bitrate = int(br_text.split()[0]) if br_text else 256
 
-        # Parse timeout
-        tt_text = self.transcode_timeout.value
-        timeout_values = {"2 minutes": 120, "5 minutes": 300, "10 minutes": 600, "30 minutes": 1800}
-        s.transcode_timeout = timeout_values.get(tt_text, 300)
+        # Parse video CRF (extract leading integer)
+        crf_text = self.video_crf.value
+        try:
+            s.video_crf = int(crf_text.split()[0])
+        except (ValueError, IndexError):
+            s.video_crf = 23
+
+        # Video preset (stored as-is)
+        s.video_preset = self.video_preset.value or "fast"
 
         # Parse sync workers
         sw_text = self.sync_workers.value
@@ -846,20 +787,8 @@ class SettingsPage(QWidget):
         """Clear custom storage paths and revert to platform defaults."""
         self.transcode_cache_dir.value = ""
         self.settings_dir.value = ""
+        self.log_dir.value = ""
         self.backup_dir.value = ""
-        self._save()
-
-    def _on_theme_changed(self, text: str):
-        """Apply the selected theme mode immediately."""
-        from ..theme import ThemeManager
-        mode_rmap = {"Dark": "dark", "Light": "light", "System": "system"}
-        ThemeManager.instance().set_mode(mode_rmap.get(text, "dark"))
-        self._save()
-
-    def _on_accent_changed(self, name: str):
-        """Apply the selected accent color immediately."""
-        from ..theme import ThemeManager
-        ThemeManager.instance().set_accent(name)
         self._save()
 
     def _on_close(self):

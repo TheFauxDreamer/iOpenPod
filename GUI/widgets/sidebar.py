@@ -737,7 +737,8 @@ class Sidebar(QFrame):
     def updateDeviceInfo(self, name: str, model: str, tracks: int, albums: int,
                          size_bytes: int, duration_ms: int,
                          db_version_hex: str = "", db_version_name: str = "",
-                         db_id: int = 0):
+                         db_id: int = 0, videos: int = 0,
+                         podcasts: int = 0, audiobooks: int = 0):
         """Update the device info card with current device data."""
         self.device_card.update_device_info(name, model)
         self.device_card.update_stats(tracks, albums, size_bytes, duration_ms)

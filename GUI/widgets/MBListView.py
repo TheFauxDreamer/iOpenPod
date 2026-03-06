@@ -11,9 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-import json
-from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint, QMimeData, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QColor, QCursor, QKeyEvent, QWheelEvent, QMouseEvent, QDrag
+from PyQt6.QtCore import Qt, QTimer, QSize, QEvent, QPoint, pyqtSignal
+from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QColor, QCursor, QKeyEvent, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -34,7 +33,7 @@ log = logging.getLogger(__name__)
 # Formatters - Shared formatters + local display-specific ones
 # =============================================================================
 
-from .formatters import format_size, format_duration_mmss, format_rating  # noqa: E402
+from .formatters import format_size, format_duration_mmss  # noqa: E402
 
 
 def format_duration(ms: int) -> str:
@@ -78,8 +77,9 @@ def format_media_type(value: int) -> str:
     names = []
     _BITS = {
         0x01: "Audio", 0x02: "Video", 0x04: "Podcast",
-        0x08: "Audiobook", 0x20: "Music Video", 0x40: "TV Show",
-        0x100: "Ringtone",
+        0x06: "Video Podcast", 0x08: "Audiobook",
+        0x20: "Music Video", 0x40: "TV Show",
+        0x4000: "Ringtone",
     }
     for bit, name in _BITS.items():
         if value & bit:
@@ -111,84 +111,248 @@ def format_checked(val: int) -> str:
     return ""
 
 
+def format_bool_flag(val: int) -> str:
+    """Format a 0/1 flag as Yes/empty."""
+    return "Yes" if val else ""
+
+
+def format_compilation(val: int) -> str:
+    """Format compilation flag."""
+    return "Yes" if val else ""
+
+
+def format_sound_check(val: int) -> str:
+    """Format Sound Check value as dB gain."""
+    if not val:
+        return ""
+    import math
+    try:
+        db = 10 * math.log10(val / 1000.0)
+        return f"{db:+.1f} dB"
+    except (ValueError, ZeroDivisionError):
+        return str(val)
+
+
+def format_rating(stars_x20: int) -> str:
+    """Format rating (0-100, stars x 20) as star display."""
+    if not stars_x20:
+        return ""
+    stars = stars_x20 // 20
+    return "★" * stars + "☆" * (5 - stars)
+
+
+def format_dbid(val: int) -> str:
+    """Format 64-bit dbid as hex."""
+    if not val:
+        return ""
+    return f"0x{val:016X}"
+
+
+def format_samples(val: int) -> str:
+    """Format large sample counts with comma separators."""
+    if not val:
+        return ""
+    return f"{val:,}"
+
+
 # =============================================================================
 # Column Configuration
 # =============================================================================
 
 # Maps internal key -> (display_name, optional_formatter)
 COLUMN_CONFIG: dict[str, tuple[str, Callable[[int], str] | None]] = {
+    # ── Playlist position (synthetic) ──
     "_pl_pos": ("#", None),
+    # ── Core metadata ──
     "Title": ("Title", None),
     "Artist": ("Artist", None),
     "Album": ("Album", None),
     "Album Artist": ("Album Artist", None),
     "Genre": ("Genre", None),
+    "Composer": ("Composer", None),
+    "Comment": ("Comment", None),
+    "Grouping": ("Grouping", None),
     "year": ("Year", None),
+    "trackNumber": ("Track #", None),
+    "totalTracks": ("Track Total", None),
+    "discNumber": ("Disc #", None),
+    "totalDiscs": ("Disc Total", None),
+    "compilation": ("Compilation", format_compilation),
+    "bpm": ("BPM", None),
+    # ── Playback ──
     "length": ("Time", format_duration),
     "rating": ("Rating", format_rating),
     "playCount": ("Plays", None),
     "skipCount": ("Skips", None),
-    "bitrate": ("Bitrate", format_bitrate),
-    "size": ("Size", format_size),
-    "sampleRate": ("Sample Rate", format_sample_rate),
-    "trackNumber": ("#", None),
-    "discNumber": ("Disc", None),
-    "dateAdded": ("Added", format_date),
     "lastPlayed": ("Last Played", format_date),
-    "bpm": ("BPM", None),
-    "Composer": ("Composer", None),
-    "filetype": ("Format (raw)", None),
-    "_format": ("Format", None),
-    # ── New columns from parser improvements ──
-    "lastModified": ("Modified", format_date),
     "lastSkipped": ("Last Skipped", format_date),
-    "dateReleased": ("Released", format_date),
-    "mediaType": ("Media Type", format_media_type),
-    "volume": ("Volume Adj.", format_volume),
-    "explicitFlag": ("Explicit", format_explicit),
-    "totalTracks": ("Track Total", None),
-    "totalDiscs": ("Disc Total", None),
-    "Comment": ("Comment", None),
-    "Grouping": ("Grouping", None),
-    "Description Text": ("Description", None),
-    "startTime": ("Start", format_duration),
-    "stopTime": ("Stop", format_duration),
+    "startTime": ("Start Time", format_duration),
+    "stopTime": ("Stop Time", format_duration),
     "bookmarkTime": ("Bookmark", format_duration),
     "checked": ("Checked", format_checked),
-    "gaplessTrackFlag": ("Gapless", None),
-    "gaplessAlbumFlag": ("Gapless Album", None),
+    "playedMark": ("Played", format_bool_flag),
+    "soundCheck": ("Sound Check", format_sound_check),
+    "volume": ("Volume Adj.", format_volume),
+    # ── File / encoding info ──
+    "filetype": ("Format", None),
+    "bitrate": ("Bitrate", format_bitrate),
+    "sampleRate": ("Sample Rate", format_sample_rate),
+    "size": ("Size", format_size),
+    "vbr": ("VBR", format_bool_flag),
+    "mediaType": ("Media Type", format_media_type),
+    "explicitFlag": ("Explicit", format_explicit),
+    # ── Dates ──
+    "dateAdded": ("Date Added", format_date),
+    "lastModified": ("Date Modified", format_date),
+    "dateReleased": ("Release Date", format_date),
+    # ── Sort override fields ──
+    "Sort Title": ("Sort Title", None),
+    "Sort Artist": ("Sort Artist", None),
+    "Sort Album": ("Sort Album", None),
+    "Sort Album Artist": ("Sort Album Artist", None),
+    "Sort Composer": ("Sort Composer", None),
+    "Sort Show": ("Sort Show", None),
+    # ── Video / TV Show ──
+    "Show": ("Show", None),
+    "seasonNumber": ("Season", None),
+    "episodeNumber": ("Episode #", None),
+    "Episode": ("Episode ID", None),
+    "TV Network": ("Network", None),
+    "Description Text": ("Description", None),
+    "Subtitle": ("Subtitle", None),
+    # ── Podcast ──
+    "Category": ("Category", None),
+    "Podcast Enclosure URL": ("Enclosure URL", None),
+    "Podcast RSS URL": ("RSS URL", None),
+    "podcastFlag": ("Podcast", format_bool_flag),
+    # ── Gapless ──
+    "gaplessTrackFlag": ("Gapless", format_bool_flag),
+    "gaplessAlbumFlag": ("Gapless Album", format_bool_flag),
+    "pregap": ("Pre-gap", format_samples),
+    "postgap": ("Post-gap", format_samples),
+    "sampleCount": ("Sample Count", format_samples),
+    # ── Flags ──
+    "skipWhenShuffling": ("Skip Shuffle", format_bool_flag),
+    "rememberPosition": ("Remember Pos.", format_bool_flag),
+    "lyricsFlag": ("Has Lyrics", format_bool_flag),
+    # ── Artwork ──
+    "artworkCount": ("Art Count", None),
+    # ── Identifiers (diagnostic) ──
+    "trackID": ("Track ID", None),
+    "dbid": ("DBID", format_dbid),
+    "albumID": ("Album ID", None),
+    # ── EQ ──
+    "EQ Setting": ("Equalizer", None),
+    # ── Synthetic (computed) ──
+    "_format": ("Format Tag", None),
 }
 
-# Preferred column order when displaying tracks
+# Preferred column order — controls the order columns appear when auto-
+# building the list AND the order they appear in the "Add Column" menu.
+# Every key in COLUMN_CONFIG should appear here; anything omitted is
+# appended at the end.
 PREFERRED_COLUMN_ORDER = [
-    "Title", "Artist", "Album", "Album Artist", "Genre", "_format",
-    "year", "length", "rating", "playCount", "skipCount",
-    "trackNumber", "discNumber", "bitrate", "dateAdded", "lastPlayed",
-    "lastModified", "lastSkipped", "dateReleased", "mediaType",
-    "volume", "explicitFlag", "Comment", "Grouping", "Description Text",
-    "totalTracks", "totalDiscs", "startTime", "stopTime", "bookmarkTime",
-    "checked", "gaplessTrackFlag", "gaplessAlbumFlag",
+    # Core identity
+    "Title", "Artist", "Album", "Album Artist", "Genre", "Composer",
+    "year", "trackNumber", "totalTracks", "discNumber", "totalDiscs",
+    "compilation", "bpm",
+    # Playback / stats
+    "length", "rating", "playCount", "skipCount",
+    "lastPlayed", "lastSkipped", "checked", "playedMark",
+    # Audio quality
+    "_format", "filetype", "bitrate", "sampleRate", "size", "vbr",
+    # Volume / normalization
+    "soundCheck", "volume",
+    # Dates
+    "dateAdded", "lastModified", "dateReleased",
+    # Tags
+    "Comment", "Grouping", "explicitFlag",
+    # Sort overrides
+    "Sort Title", "Sort Artist", "Sort Album",
+    "Sort Album Artist", "Sort Composer", "Sort Show",
+    # Video / TV
+    "mediaType", "Show", "seasonNumber", "episodeNumber",
+    "Episode", "TV Network", "Description Text", "Subtitle",
+    # Podcast
+    "Category", "podcastFlag",
+    "Podcast Enclosure URL", "Podcast RSS URL",
+    # Playback range
+    "startTime", "stopTime", "bookmarkTime",
+    # Gapless
+    "gaplessTrackFlag", "gaplessAlbumFlag",
+    "pregap", "postgap", "sampleCount",
+    # Flags
+    "skipWhenShuffling", "rememberPosition", "lyricsFlag",
+    # Artwork
+    "artworkCount",
+    # Identifiers
+    "trackID", "dbid", "albumID",
+    # EQ
+    "EQ Setting",
 ]
 
-# Default columns shown when no specific selection
-DEFAULT_COLUMNS = ["Title", "Artist", "Album", "Genre", "_format", "length", "rating", "playCount"]
+# ── Per-media-type default column sets ────────────────────────────────────────
+
+# Music (default)
+DEFAULT_COLUMNS = [
+    "Title", "Artist", "Album", "Genre", "_format",
+    "length", "rating", "playCount",
+]
+
+# Music videos / Movies
+DEFAULT_VIDEO_COLUMNS = [
+    "Title", "Artist", "Album", "length",
+    "mediaType", "size", "bitrate", "dateAdded",
+    "rating", "playCount",
+]
+
+# Podcasts
+DEFAULT_PODCAST_COLUMNS = [
+    "Title", "Artist", "Album", "length",
+    "dateReleased", "playCount", "playedMark",
+    "Description Text", "dateAdded",
+]
+
+# Audiobooks
+DEFAULT_AUDIOBOOK_COLUMNS = [
+    "Title", "Artist", "Album", "length",
+    "bookmarkTime", "playCount", "rating", "dateAdded",
+]
 
 # Columns that should be right-aligned (numeric)
 NUMERIC_COLUMNS = frozenset({
-    "year", "playCount", "skipCount", "trackNumber", "discNumber", "bpm",
-    "_pl_pos", "totalTracks", "totalDiscs", "volume",
-    "gaplessTrackFlag", "gaplessAlbumFlag",
+    "_pl_pos", "year", "trackNumber", "totalTracks", "discNumber", "totalDiscs",
+    "bpm", "playCount", "skipCount", "volume",
+    "seasonNumber", "episodeNumber", "artworkCount",
+    "trackID", "albumID",
+    "pregap", "postgap", "sampleCount",
 })
 
 # Columns whose raw value should be stored in UserRole for correct numeric sorting.
 # Includes all integer/float columns and formatted columns (size, bitrate, etc.).
 SORTABLE_NUMERIC_KEYS = frozenset({
-    "year", "playCount", "skipCount", "trackNumber", "discNumber", "bpm",
-    "_pl_pos", "length", "rating", "bitrate", "size", "sampleRate",
+    "_pl_pos",
+    # Core numeric
+    "year", "trackNumber", "totalTracks", "discNumber", "totalDiscs",
+    "bpm", "compilation",
+    # Playback stats
+    "length", "rating", "playCount", "skipCount",
+    "startTime", "stopTime", "bookmarkTime",
+    "checked", "playedMark", "soundCheck", "volume",
+    # File info
+    "bitrate", "size", "sampleRate", "vbr",
+    "mediaType", "explicitFlag",
+    # Dates
     "dateAdded", "lastPlayed", "lastModified", "lastSkipped", "dateReleased",
-    "mediaType", "volume", "explicitFlag", "totalTracks", "totalDiscs",
-    "startTime", "stopTime", "bookmarkTime", "checked",
+    # Video/Podcast
+    "seasonNumber", "episodeNumber", "podcastFlag",
+    # Gapless
     "gaplessTrackFlag", "gaplessAlbumFlag",
+    "pregap", "postgap", "sampleCount",
+    # Flags
+    "skipWhenShuffling", "rememberPosition", "lyricsFlag",
+    # Artwork / IDs
+    "artworkCount", "trackID", "dbid", "albumID",
 })
 
 # Batch size for incremental population (rows per timer tick)
@@ -255,6 +419,7 @@ class MusicBrowserList(QFrame):
         self._tracks: list[dict] = []          # Currently displayed (filtered) tracks
         self._columns: list[str] = DEFAULT_COLUMNS.copy()
         self._current_filter: dict | None = None
+        self._media_type_filter: int | None = None  # Persisted from loadTracks()
         self._is_playlist_mode: bool = False   # True when showing a playlist in order
         self._current_playlist: dict | None = None  # The playlist dict when in playlist mode
 
@@ -284,13 +449,6 @@ class MusicBrowserList(QFrame):
         self._grab_origin = QPoint()
         self._grab_h_value = 0
         self._grab_v_value = 0
-
-        # Track whether dominant color tinting is active
-        self._dominant_color_active = False
-
-        # Connect to theme changes
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
 
     # -------------------------------------------------------------------------
     # Properties for backwards compatibility
@@ -334,22 +492,14 @@ class MusicBrowserList(QFrame):
         t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         t.setAlternatingRowColors(True)
 
-        # Enable drag from table rows
-        t.setDragEnabled(True)
-        t.setDefaultDropAction(Qt.DropAction.CopyAction)
-        t.startDrag = self._startDrag
-
         # Right-click context menu on track rows
         t.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         t.customContextMenuRequested.connect(self._on_track_context_menu)
 
-        # Double-click to play
-        t.cellDoubleClicked.connect(self._on_cell_double_clicked)
-
         t.setStyleSheet(f"""
             QTableWidget {{
-                background-color: {Colors.SURFACE};
-                alternate-background-color: {Colors.SURFACE_ALT};
+                background-color: rgba(0,0,0,20);
+                alternate-background-color: rgba(255,255,255,4);
                 border: none;
                 color: {Colors.TEXT_PRIMARY};
                 gridline-color: {Colors.GRIDLINE};
@@ -364,7 +514,7 @@ class MusicBrowserList(QFrame):
                 background-color: {Colors.SELECTION};
             }}
             QTableWidget::item:hover {{
-                background-color: {Colors.SURFACE_HOVER};
+                background-color: rgba(255,255,255,6);
             }}
             QHeaderView::section {{
                 background-color: {Colors.SURFACE_ALT};
@@ -409,184 +559,41 @@ class MusicBrowserList(QFrame):
         table_vp = t.viewport()
         if table_vp:
             table_vp.installEventFilter(self)
+            t.setMouseTracking(True)
 
-        t.setMouseTracking(True)
+        # Double-click to play
+        t.cellDoubleClicked.connect(self._on_cell_double_clicked)
+
         t.setSortingEnabled(True)
-
-    def _startDrag(self, supportedActions):
-        """Custom drag handler: serialize selected tracks as iopenpod items."""
-        selected = self.table.selectionModel().selectedRows()
-        if not selected:
-            return
-        tracks = []
-        for idx in selected:
-            row = idx.row()
-            if 0 <= row < len(self._tracks):
-                track = self._tracks[row]
-                tracks.append({
-                    "type": "track",
-                    "title": track.get("Title", ""),
-                    "artist": track.get("Artist", ""),
-                    "album": track.get("Album", ""),
-                    "_pc_path": track.get("_pc_path", ""),
-                })
-        if not tracks:
-            return
-        drag = QDrag(self.table)
-        mime = QMimeData()
-        mime.setData("application/x-iopenpod-items", json.dumps(tracks).encode())
-        count = len(tracks)
-        mime.setText(f"{count} track{'s' if count != 1 else ''}")
-        drag.setMimeData(mime)
-        drag.exec(Qt.DropAction.CopyAction)
-
-    def _rebuild_styles(self) -> None:
-        """Rebuild table and status label styles from current theme palette."""
-        if self._dominant_color_active:
-            return  # Don't override album color tinting
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {Colors.SURFACE};
-                alternate-background-color: {Colors.SURFACE_ALT};
-                border: none;
-                color: {Colors.TEXT_PRIMARY};
-                gridline-color: {Colors.GRIDLINE};
-                selection-background-color: {Colors.SELECTION};
-                outline: none;
-            }}
-            QTableWidget::item {{
-                padding: 6px 8px;
-                border-bottom: 1px solid {Colors.BORDER_SUBTLE};
-            }}
-            QTableWidget::item:selected {{
-                background-color: {Colors.SELECTION};
-            }}
-            QTableWidget::item:hover {{
-                background-color: {Colors.SURFACE_HOVER};
-            }}
-            QHeaderView::section {{
-                background-color: {Colors.SURFACE_ALT};
-                color: {Colors.TEXT_SECONDARY};
-                padding: 6px 8px;
-                border: none;
-                border-bottom: 1px solid {Colors.BORDER};
-                font-weight: 600;
-                font-size: 11px;
-            }}
-            QHeaderView::section:hover {{
-                background-color: {Colors.SURFACE_RAISED};
-                color: {Colors.TEXT_PRIMARY};
-            }}
-            QHeaderView::section:pressed {{
-                background-color: {Colors.SURFACE_ACTIVE};
-            }}
-            QTableCornerButton::section {{
-                background-color: {Colors.SURFACE_ALT};
-                border: none;
-                border-bottom: 1px solid {Colors.BORDER};
-            }}
-        """)
-        self._status_label.setStyleSheet(
-            f"color: {Colors.TEXT_SECONDARY}; padding: 3px 8px;"
-        )
-
-    # -------------------------------------------------------------------------
-    # Colorful Album Background (iTunes 11 style)
-    # -------------------------------------------------------------------------
-
-    _default_table_css: str = ""  # Stored on first _setup_table call
-
-    def setDominantColor(self, r: int, g: int, b: int,
-                         text: tuple[int, int, int] | None = None,
-                         text_secondary: tuple[int, int, int] | None = None):
-        """Tint the track list background with an album's dominant color.
-
-        When active, the table gets a gradient background derived from
-        the album artwork and uses contrast-appropriate text colors
-        (iTunes 11 style).
-        """
-        # Darker shade for gradient stop
-        dr, dg, db = max(0, int(r * 0.3)), max(0, int(g * 0.3)), max(0, int(b * 0.3))
-
-        # Text colors: use provided or fall back to white/light-grey
-        if text:
-            tr, tg, tb = text
-        else:
-            tr, tg, tb = 255, 255, 255
-        if text_secondary:
-            sr, sg, sb = text_secondary
-        else:
-            sr, sg, sb = max(0, tr - 40), max(0, tg - 40), max(0, tb - 40)
-
-        txt_css = f"rgb({tr},{tg},{tb})"
-        txt2_css = f"rgb({sr},{sg},{sb})"
-
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba({r},{g},{b},45), stop:1 rgba({dr},{dg},{db},45));
-                alternate-background-color: rgba({r},{g},{b},20);
-                border: none;
-                color: {txt_css};
-                gridline-color: rgba({tr},{tg},{tb},20);
-                selection-background-color: rgba({tr},{tg},{tb},60);
-                outline: none;
-            }}
-            QTableWidget::item {{
-                padding: 6px 8px;
-                border-bottom: 1px solid rgba({tr},{tg},{tb},10);
-            }}
-            QTableWidget::item:selected {{
-                background-color: rgba({tr},{tg},{tb},60);
-            }}
-            QTableWidget::item:hover {{
-                background-color: rgba({tr},{tg},{tb},20);
-            }}
-            QHeaderView::section {{
-                background-color: rgba({r},{g},{b},30);
-                color: {txt2_css};
-                padding: 6px 8px;
-                border: none;
-                border-bottom: 1px solid rgba({tr},{tg},{tb},15);
-                font-weight: 600;
-                font-size: 11px;
-            }}
-            QHeaderView::section:hover {{
-                background-color: rgba({r},{g},{b},50);
-                color: {txt_css};
-            }}
-            QHeaderView::section:pressed {{
-                background-color: rgba({r},{g},{b},60);
-            }}
-            QTableCornerButton::section {{
-                background-color: rgba({r},{g},{b},30);
-                border: none;
-                border-bottom: 1px solid rgba({tr},{tg},{tb},15);
-            }}
-        """)
-
-    def resetDominantColor(self):
-        """Remove the colorful tint and restore default table styling."""
-        self._setup_table()
 
     # -------------------------------------------------------------------------
     # Public API - Loading and Filtering
     # -------------------------------------------------------------------------
 
-    def loadTracks(self, cache=None) -> None:
+    def loadTracks(self, media_type_filter: int | None = None) -> None:
         """Load all tracks from the cache and apply current filter.
 
         Args:
-            cache: Data cache to use.  If None, falls back to iTunesDBCache.
+            media_type_filter: If set, only include tracks whose mediaType
+                               has this bit set (bitwise AND).  mediaType 0
+                               ("Audio/Video") passes both audio and video
+                               filters, matching iTunes behaviour.
         """
-        if cache is None:
-            from ..app import iTunesDBCache
-            cache = iTunesDBCache.get_instance()
+        from ..app import iTunesDBCache
 
+        cache = iTunesDBCache.get_instance()
         if not cache.is_ready():
             return
 
+        self._media_type_filter = media_type_filter
         self._all_tracks = cache.get_tracks()
+
+        if media_type_filter is not None:
+            self._all_tracks = [
+                t for t in self._all_tracks
+                if t.get("mediaType", 1) == 0  # type 0 = "Audio/Video", shows everywhere
+                or (t.get("mediaType", 1) & media_type_filter)
+            ]
 
         if self._current_filter:
             self.applyFilter(self._current_filter)
@@ -676,6 +683,7 @@ class MusicBrowserList(QFrame):
         self._all_tracks = []
         self._tracks = []
         self._current_filter = None
+        self._media_type_filter = None
         self._is_playlist_mode = False
         self._current_playlist = None
         self._art_cache.clear()
@@ -696,23 +704,43 @@ class MusicBrowserList(QFrame):
     # -------------------------------------------------------------------------
 
     def _ensure_tracks_loaded(self) -> None:
-        """Ensure tracks are loaded before filtering (without populating table)."""
+        """Ensure tracks are loaded before filtering (without populating table).
+
+        Respects the media type filter set by the most recent loadTracks() call
+        so that filterByAlbum/Artist/Genre don't reintroduce excluded tracks.
+        """
         if not self._all_tracks:
-            # Try PC library cache first, then iPod cache
-            from ..pc_library_cache import PCLibraryCache
-            pc_cache = PCLibraryCache.get_instance()
-            if pc_cache.is_ready():
-                self._all_tracks = pc_cache.get_tracks()
-                return
             from ..app import iTunesDBCache
+
             cache = iTunesDBCache.get_instance()
             if cache.is_ready():
                 self._all_tracks = cache.get_tracks()
+                mf = getattr(self, "_media_type_filter", None)
+                if mf is not None:
+                    self._all_tracks = [
+                        t for t in self._all_tracks
+                        if t.get("mediaType", 1) == 0
+                        or (t.get("mediaType", 1) & mf)
+                    ]
 
     def _setup_columns(self) -> None:
         """Determine which columns to display based on available data."""
+        # Choose appropriate defaults based on media type filter
+        mf = getattr(self, "_media_type_filter", None)
+        is_video = mf is not None and (mf & 0x62) and not (mf & 0x01)
+        is_podcast = mf is not None and (mf & 0x04) != 0 and not is_video
+        is_audiobook = mf is not None and (mf & 0x08) != 0 and not is_video
+        if is_video:
+            defaults = DEFAULT_VIDEO_COLUMNS
+        elif is_podcast:
+            defaults = DEFAULT_PODCAST_COLUMNS
+        elif is_audiobook:
+            defaults = DEFAULT_AUDIOBOOK_COLUMNS
+        else:
+            defaults = DEFAULT_COLUMNS
+
         if not self._tracks:
-            self._columns = [c for c in DEFAULT_COLUMNS if c not in self._hidden_columns]
+            self._columns = [c for c in defaults if c not in self._hidden_columns]
             return
 
         # Sample tracks to find available keys
@@ -720,7 +748,7 @@ class MusicBrowserList(QFrame):
         for track in self._tracks[:100]:
             available_keys.update(track.keys())
 
-        # Synthetic columns that are always available (computed, not in track dict)
+        # Synthetic columns (computed, not in track dicts)
         _SYNTHETIC_COLUMNS = {"_format"}
         available_keys.update(_SYNTHETIC_COLUMNS)
 
@@ -729,14 +757,9 @@ class MusicBrowserList(QFrame):
             base = [k for k in self._user_col_order
                     if k in available_keys and k not in self._hidden_columns]
         else:
-            # Build column order: preferred columns first (if data exists)
-            base = [k for k in PREFERRED_COLUMN_ORDER
+            # Show only the media-type defaults (user can add more via header menu)
+            base = [k for k in defaults
                     if k in available_keys and k not in self._hidden_columns]
-
-            # Add any remaining known columns that aren't hidden
-            for key in COLUMN_CONFIG:
-                if key in available_keys and key not in base and key not in self._hidden_columns:
-                    base.append(key)
 
         self._columns = base
 
@@ -750,11 +773,9 @@ class MusicBrowserList(QFrame):
 
     def _cancel_population(self) -> None:
         """Cancel any in-progress population."""
-        old_id = self._load_id
         self._load_id += 1
         self._pending_rows = []
         self._is_populating = False
-        log.debug(f"_cancel_population: {old_id} -> {self._load_id}")
 
     def _populate_table(self) -> None:
         """Populate the table with current tracks."""
@@ -773,8 +794,6 @@ class MusicBrowserList(QFrame):
             load_id = self._load_id
             tracks = self._tracks
             columns = self._columns
-
-            log.debug(f"_populate_table: load_id={load_id}, tracks={len(tracks)}")
 
             # Minimal setup - no setRowCount to avoid blocking!
             self.table.setSortingEnabled(False)
@@ -812,7 +831,6 @@ class MusicBrowserList(QFrame):
             QTimer.singleShot(0, self._populate_next_batch)
 
         except RuntimeError:
-            log.debug("_populate_table: RuntimeError (widget deleted)")
             pass  # Widget deleted
 
     def _populate_next_batch(self) -> None:
@@ -820,12 +838,10 @@ class MusicBrowserList(QFrame):
         try:
             # Check for cancellation FIRST
             if self._current_load_id != self._load_id:
-                log.debug(f"_populate_next_batch: cancelled (current={self._current_load_id}, load={self._load_id})")
                 self._is_populating = False
                 return
 
             if not self._pending_rows:
-                log.debug("_populate_next_batch: no pending rows, finishing")
                 self._is_populating = False
                 self._finish_population()
                 return
@@ -864,11 +880,11 @@ class MusicBrowserList(QFrame):
                     self._finish_population()
 
         except RuntimeError as e:
-            log.debug(f"_populate_next_batch: RuntimeError: {e}")
+            log.warning(f"_populate_next_batch: RuntimeError: {e}")
             self._is_populating = False
             self._pending_rows = []
         except Exception as e:
-            log.debug(f"_populate_next_batch: Exception: {e}")
+            log.warning(f"_populate_next_batch: Exception: {e}")
             self._is_populating = False
             self._pending_rows = []
 
@@ -895,7 +911,7 @@ class MusicBrowserList(QFrame):
                     art_item.setData(Qt.ItemDataRole.UserRole, mhii_link)
 
         for col, key in enumerate(columns):
-            # Synthetic columns — not from track dict
+            # Playlist position is synthetic — not from track dict
             if key == "_pl_pos":
                 display = str(row + 1)
                 raw_value: int | float | str = row + 1
@@ -1056,7 +1072,7 @@ class MusicBrowserList(QFrame):
                 break
             result = find_image_by_imgId(artworkdb_data, artwork_folder, link, imgid_index)
             if result is not None:
-                pil_img, _dcol = result
+                pil_img, _dcol, _album_colors = result
                 pil_img = pil_img.convert("RGBA")
                 results[link] = (pil_img.width, pil_img.height, pil_img.tobytes("raw", "RGBA"))
             else:
@@ -1105,13 +1121,27 @@ class MusicBrowserList(QFrame):
         """Update the status label with track count info."""
         shown = len(self._tracks)
         total = len(self._all_tracks)
+        # Determine context-appropriate noun from media type filter
+        mf = getattr(self, "_media_type_filter", None)
+        if mf is not None and mf & 0x62 and not (mf & 0x01):
+            noun = "video"
+        elif mf is not None and mf == 0x04:
+            noun = "episode"  # Podcast episodes
+        elif mf is not None and mf == 0x08:
+            noun = "audiobook"
+        elif mf is not None and mf == 0x01:
+            noun = "song"
+        else:
+            noun = "track"
+        noun_pl = noun + "s" if total != 1 else noun
+        shown_pl = noun + "s" if shown != 1 else noun
         if total == 0:
             self._status_label.setText("")
         elif shown == total or self._current_filter is None:
-            self._status_label.setText(f"{total:,} track{'s' if total != 1 else ''}")
+            self._status_label.setText(f"{total:,} {noun_pl}")
         else:
             self._status_label.setText(
-                f"{shown:,} of {total:,} track{'s' if total != 1 else ''}"
+                f"{shown:,} of {total:,} {shown_pl}"
             )
 
     @staticmethod
@@ -1164,23 +1194,31 @@ class MusicBrowserList(QFrame):
         if table_vp and obj is table_vp:
             etype = event.type()
 
-            # Shift + wheel → horizontal scroll
+            # Wheel events: horizontal trackpad swipe, shift+wheel, normal wheel
             if etype == QEvent.Type.Wheel:
                 we: QWheelEvent = event  # type: ignore[assignment]
+                dx = we.angleDelta().x()
+                dy = we.angleDelta().y()
+
+                # Shift + wheel → horizontal scroll (mouse wheel users)
                 if we.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                     hbar = self.table.horizontalScrollBar()
                     if hbar:
-                        delta = we.angleDelta().y() or we.angleDelta().x()
+                        delta = dy or dx
                         hbar.setValue(hbar.value() - delta)
                     return True
 
-                # Normal wheel → scroll exactly one row per notch
+                # Trackpad horizontal swipe (dx dominant, dy near zero)
+                # Let it through to both scrollbars naturally
+                hbar = self.table.horizontalScrollBar()
                 vbar = self.table.verticalScrollBar()
-                if vbar:
-                    delta_y = we.angleDelta().y()
-                    if delta_y > 0:
+                if hbar and dx != 0:
+                    hbar.setValue(hbar.value() - dx)
+                # Vertical: scroll exactly one row per notch
+                if vbar and dy != 0:
+                    if dy > 0:
                         vbar.setValue(vbar.value() - 1)
-                    elif delta_y < 0:
+                    else:
                         vbar.setValue(vbar.value() + 1)
                 return True
 
@@ -1357,17 +1395,6 @@ class MusicBrowserList(QFrame):
     # Track Context Menu (right-click on rows)
     # -------------------------------------------------------------------------
 
-    def _on_cell_double_clicked(self, row: int, col: int) -> None:
-        """Handle double-click on a table row — emit play request."""
-        first_data_col = 1 if self._show_art else 0
-        item = self.table.item(row, first_data_col)
-        if item is None:
-            return
-        orig_idx = item.data(Qt.ItemDataRole.UserRole + 1)
-        if orig_idx is not None and 0 <= orig_idx < len(self._tracks):
-            track = self._tracks[orig_idx]
-            self.track_play_requested.emit(track, list(self._tracks))
-
     def _get_selected_tracks(self) -> list[dict]:
         """Return track dicts for all currently selected rows."""
         selected_rows = sorted({idx.row() for idx in self.table.selectedIndexes()})
@@ -1384,6 +1411,17 @@ class MusicBrowserList(QFrame):
             if orig_idx is not None and 0 <= orig_idx < len(self._tracks):
                 tracks.append(self._tracks[orig_idx])
         return tracks
+
+    def _on_cell_double_clicked(self, row: int, col: int) -> None:
+        """Handle double-click on a track row to start playback."""
+        first_data_col = 1 if self._show_art else 0
+        anchor = self.table.item(row, first_data_col)
+        if not anchor:
+            return
+        orig_idx = anchor.data(Qt.ItemDataRole.UserRole + 1)
+        if orig_idx is not None and 0 <= orig_idx < len(self._tracks):
+            track = self._tracks[orig_idx]
+            self.track_play_requested.emit(track, list(self._tracks))
 
     def _on_track_context_menu(self, pos) -> None:
         """Show context menu when right-clicking on track rows."""
@@ -1434,7 +1472,7 @@ class MusicBrowserList(QFrame):
                 if regular:
                     for pl in regular:
                         title = pl.get("Title", "Untitled")
-                        act = add_menu.addAction(title)
+                        act = add_menu.addAction(f"☰  {title}")
                         if act:
                             act.triggered.connect(
                                 lambda _=False, p=pl: self._add_selected_to_playlist(p)
@@ -1607,26 +1645,101 @@ class MusicBrowserList(QFrame):
                 )
 
     def _build_start_stop_menu(self, menu: QMenu, style: str, selected: list[dict]) -> None:
-        """Add Start/Stop Time actions to clear custom start or stop times."""
-        # Only show if any selected track has a non-zero start or stop time
-        has_start = any(t.get("startTime", 0) for t in selected)
-        has_stop = any(t.get("stopTime", 0) for t in selected)
-        if not has_start and not has_stop:
+        """Add Start/Stop Time submenu with Set and Clear actions."""
+        menu.addSeparator()
+
+        # ── Start Time ────────────────────────────────────────────────
+        start_menu = menu.addMenu("Start Time")
+        if start_menu:
+            start_menu.setStyleSheet(style)
+            # Current value display (if unanimous across selection)
+            start_vals = {t.get("startTime", 0) for t in selected}
+            if len(start_vals) == 1:
+                val = start_vals.pop()
+                if val:
+                    info_act = start_menu.addAction(f"Current: {format_duration(val)}")
+                    if info_act:
+                        info_act.setEnabled(False)
+
+            act_set = start_menu.addAction("Set Start Time…")
+            if act_set:
+                act_set.triggered.connect(
+                    lambda _=False: self._prompt_time("startTime", selected)
+                )
+            has_start = any(t.get("startTime", 0) for t in selected)
+            if has_start:
+                act_clear = start_menu.addAction("Clear Start Time")
+                if act_clear:
+                    act_clear.triggered.connect(
+                        lambda _=False: self._set_track_flag("startTime", 0)
+                    )
+
+        # ── Stop Time ─────────────────────────────────────────────────
+        stop_menu = menu.addMenu("Stop Time")
+        if stop_menu:
+            stop_menu.setStyleSheet(style)
+            stop_vals = {t.get("stopTime", 0) for t in selected}
+            if len(stop_vals) == 1:
+                val = stop_vals.pop()
+                if val:
+                    info_act = stop_menu.addAction(f"Current: {format_duration(val)}")
+                    if info_act:
+                        info_act.setEnabled(False)
+
+            act_set = stop_menu.addAction("Set Stop Time…")
+            if act_set:
+                act_set.triggered.connect(
+                    lambda _=False: self._prompt_time("stopTime", selected)
+                )
+            has_stop = any(t.get("stopTime", 0) for t in selected)
+            if has_stop:
+                act_clear = stop_menu.addAction("Clear Stop Time")
+                if act_clear:
+                    act_clear.triggered.connect(
+                        lambda _=False: self._set_track_flag("stopTime", 0)
+                    )
+
+    def _prompt_time(self, key: str, selected: list[dict]) -> None:
+        """Show a dialog to set start or stop time in mm:ss format."""
+        from PyQt6.QtWidgets import QInputDialog
+
+        label = "Start Time" if key == "startTime" else "Stop Time"
+
+        # Pre-fill with current value if all selected tracks agree
+        vals = {t.get(key, 0) for t in selected}
+        default_text = ""
+        if len(vals) == 1:
+            ms = vals.pop()
+            if ms:
+                total_sec = ms // 1000
+                m, s = divmod(total_sec, 60)
+                default_text = f"{m}:{s:02d}"
+
+        text, ok = QInputDialog.getText(
+            self, f"Set {label}",
+            f"Enter {label.lower()} (m:ss or mm:ss):",
+            text=default_text,
+        )
+        if not ok or not text.strip():
             return
 
-        menu.addSeparator()
-        if has_start:
-            act = menu.addAction("Clear Start Time")
-            if act:
-                act.triggered.connect(
-                    lambda _=False: self._set_track_flag("startTime", 0)
-                )
-        if has_stop:
-            act = menu.addAction("Clear Stop Time")
-            if act:
-                act.triggered.connect(
-                    lambda _=False: self._set_track_flag("stopTime", 0)
-                )
+        # Parse mm:ss or m:ss or just seconds
+        text = text.strip()
+        try:
+            if ":" in text:
+                parts = text.split(":")
+                minutes = int(parts[0])
+                seconds = int(parts[1])
+            else:
+                minutes = 0
+                seconds = int(text)
+            ms = (minutes * 60 + seconds) * 1000
+            if ms < 0:
+                return
+        except (ValueError, IndexError):
+            return
+
+        self._set_track_flag(key, ms)
 
     def _set_track_flag(self, key: str, value: int) -> None:
         """Apply a flag/field change to all selected tracks via the cache."""

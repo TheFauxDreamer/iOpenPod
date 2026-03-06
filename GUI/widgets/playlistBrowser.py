@@ -4,14 +4,14 @@ PlaylistBrowser — Dedicated playlist browsing widget.
 Layout:
     ┌─────────────────────┐ ┌──────────────────────────────────────┐
     │  PLAYLISTS           │ │  PlaylistInfoCard                    │
-    │  My Mix              │ │  Title, type, stats, smart rules     │
-    │  Road Trip           │ ├──────────────────────────────────────┤
+    │  ≡ My Mix           │ │  Title, type, stats, smart rules     │
+    │  ≡ Road Trip        │ ├──────────────────────────────────────┤
     │                      │ │  TrackListTitleBar                   │
     │  SMART PLAYLISTS     │ │  MusicBrowserList (tracks)           │
-    │  Top Rated           │ │                                      │
+    │  ◇ Top Rated        │ │                                      │
     │                      │ │                                      │
     │  PODCASTS            │ │                                      │
-    │  My Podcast          │ │                                      │
+    │  ◉ My Podcast       │ │                                      │
     │                      │ │                                      │
     │  ░ Library (Master)  │ │                                      │
     └─────────────────────┘ └──────────────────────────────────────┘
@@ -47,8 +47,8 @@ log = logging.getLogger(__name__)
 # Icons for each playlist type
 _ICON_REGULAR = "≡"
 _ICON_SMART = "◇"
-_ICON_PODCAST = "◎"
-_ICON_MASTER = "▤"
+_ICON_PODCAST = "◉"
+_ICON_MASTER = "☰"
 
 
 # =============================================================================
@@ -106,7 +106,7 @@ class PlaylistInfoCard(QFrame):
         self.edit_btn.hide()
         btn_row.addWidget(self.edit_btn)
 
-        self.delete_btn = QPushButton("Delete")
+        self.delete_btn = QPushButton("✖ Delete")
         self.delete_btn.setFont(QFont(FONT_FAMILY, 9))
         self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.delete_btn.setStyleSheet(btn_css(
@@ -173,32 +173,6 @@ class PlaylistInfoCard(QFrame):
 
         self._detail_labels: list[QWidget] = []
         self._current_playlist: dict | None = None
-        self._sep = sep
-
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
-
-    def _rebuild_styles(self) -> None:
-        """Refresh inline styles when theme changes."""
-        self.setStyleSheet(f"""
-            QFrame#playlistInfoCard {{
-                background: {Colors.SURFACE};
-                border: 1px solid {Colors.BORDER_SUBTLE};
-                border-radius: {Metrics.BORDER_RADIUS_LG}px;
-            }}
-        """)
-        self.title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
-        self.type_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
-        self.stats_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
-        self._sep.setStyleSheet(f"background-color: {Colors.BORDER_SUBTLE}; border: none;")
-        self.edit_btn.setStyleSheet(btn_css(
-            bg="transparent",
-            bg_hover=Colors.ACCENT_DIM,
-            bg_press=Colors.ACCENT_PRESS,
-            fg=Colors.ACCENT,
-            border=f"1px solid {Colors.ACCENT_BORDER}",
-            padding="3px 12px",
-        ))
 
     # ─────────────────────────────────────────────────────────────
     # Public API
@@ -528,19 +502,6 @@ class PlaylistListPanel(QFrame):
         self._selected_btn: QPushButton | None = None
         self._playlist_map: dict[int, dict] = {}  # button index -> playlist dict
 
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
-
-    def _rebuild_styles(self) -> None:
-        """Refresh inline styles when theme changes."""
-        self.setStyleSheet(f"""
-            QFrame#playlistListPanel {{
-                background: {Colors.SURFACE};
-                border: 1px solid {Colors.BORDER_SUBTLE};
-                border-radius: {Metrics.BORDER_RADIUS_LG}px;
-            }}
-        """)
-
     # ─────────────────────────────────────────────────────────────
     # Public API
     # ─────────────────────────────────────────────────────────────
@@ -689,9 +650,6 @@ class PlaylistListPanel(QFrame):
         self._inner_layout.addWidget(btn)
         self._buttons.append(btn)
 
-    # Signals for new playlist creation
-    new_playlist_requested = pyqtSignal(str)  # "smart" or "regular"
-
     def _on_new_playlist(self) -> None:
         """Show the type picker dialog."""
         dlg = NewPlaylistDialog(self)
@@ -718,12 +676,10 @@ class PlaylistListPanel(QFrame):
 
         # Highlight new selection
         btn = self._buttons[index]
-        from ..theme import ThemeManager
-        a = ThemeManager.instance().accent
         btn.setStyleSheet(btn_css(
             bg=Colors.ACCENT,
-            bg_hover=a.rgba(200),
-            bg_press=a.rgba(160),
+            bg_hover="rgba(64,156,255,200)",
+            bg_press="rgba(64,156,255,160)",
             radius=Metrics.BORDER_RADIUS_SM,
             padding="7px 8px",
             extra="text-align: left;",
@@ -830,23 +786,6 @@ class PlaylistBrowser(QFrame):
         """)
 
         main_layout.addWidget(self.rightSplitter, stretch=1)
-
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
-
-    def _rebuild_styles(self) -> None:
-        """Refresh inline styles when theme changes."""
-        self.rightSplitter.setStyleSheet(f"""
-            QSplitter::handle {{
-                background: {Colors.BORDER_SUBTLE};
-            }}
-            QSplitter::handle:hover {{
-                background: {Colors.ACCENT};
-            }}
-            QSplitter::handle:pressed {{
-                background: {Colors.ACCENT_LIGHT};
-            }}
-        """)
 
     # ─────────────────────────────────────────────────────────────
     # Public API
@@ -1118,7 +1057,7 @@ class PlaylistBrowser(QFrame):
         # Show a saving indicator on the info card
         self.infoCard.edit_btn.setEnabled(False)
         self.infoCard.evaluate_btn.setEnabled(False)
-        self.infoCard.evaluate_btn.setText("\u231B Writing\u2026")
+        self.infoCard.evaluate_btn.setText("⏳ Writing…")
         self.infoCard.evaluate_btn.setVisible(True)
 
         self._eval_worker = _PlaylistWriteWorker(playlist)

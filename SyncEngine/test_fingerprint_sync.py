@@ -27,7 +27,7 @@ def test_dependencies():
     print(f"ffmpeg (Transcoding): {'✅ Available' if is_ffmpeg_available() else '❌ Not found'}")
 
     if not is_fpcalc_available():
-        print("\n⚠️  fpcalc not found!")
+        print("\n⚠  fpcalc not found!")
         print("   Download from: https://acoustid.org/chromaprint")
         print("   Windows: Extract fpcalc.exe to C:\\Program Files\\fpcalc\\ or add to PATH")
     print()
@@ -99,7 +99,7 @@ def test_fingerprinting(test_file: str | None = None):
     print("=== Fingerprint Test ===")
 
     if not is_fpcalc_available():
-        print("⚠️  Skipping: fpcalc not available")
+        print("⚠  Skipping: fpcalc not available")
         return
 
     if test_file is None:

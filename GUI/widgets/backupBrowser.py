@@ -147,7 +147,7 @@ class DeviceCard(QFrame):
         layout.setSpacing(12)
 
         # Icon
-        icon = QLabel("\u25A3")
+        icon = QLabel("\U0001F4F1")
         icon.setFont(QFont(FONT_FAMILY, 22))
         icon.setStyleSheet("background: transparent; border: none;")
         icon.setFixedWidth(36)
@@ -259,7 +259,7 @@ class SnapshotCard(QFrame):
             delta_text = " · ".join(delta_parts) + " vs previous"
             delta_color = Colors.TEXT_TERTIARY
         elif is_initial:
-            delta_text = "\u2605 Initial backup"
+            delta_text = "★ Initial backup"
             delta_color = Colors.ACCENT
         else:
             delta_text = "No changes vs previous"
@@ -287,7 +287,7 @@ class SnapshotCard(QFrame):
             restore_btn.setToolTip("Connect this device to restore")
         btn_layout.addWidget(restore_btn)
 
-        delete_btn = QPushButton("Delete")
+        delete_btn = QPushButton("✖ Delete")
         delete_btn.setFont(QFont(FONT_FAMILY, 9))
         delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         delete_btn.setFixedWidth(80)
@@ -350,7 +350,7 @@ class BackupBrowserWidget(QWidget):
         self._back_btn = back_btn
         tb_layout.addWidget(back_btn)
 
-        title = QLabel("Device Backups")
+        title = QLabel("⬡ Device Backups")
         title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -375,7 +375,7 @@ class BackupBrowserWidget(QWidget):
         self._all_devices_btn.setVisible(False)
         tb_layout.addWidget(self._all_devices_btn)
 
-        self._open_folder_btn = QPushButton("▸")
+        self._open_folder_btn = QPushButton("□")
         self._open_folder_btn.setFont(QFont(FONT_FAMILY, 13))
         self._open_folder_btn.setToolTip("Open backup folder")
         self._open_folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -391,7 +391,7 @@ class BackupBrowserWidget(QWidget):
         self._open_folder_btn.clicked.connect(self._on_open_folder)
         tb_layout.addWidget(self._open_folder_btn)
 
-        self.backup_now_btn = QPushButton("Backup Now")
+        self.backup_now_btn = QPushButton("↻ Backup Now")
         self.backup_now_btn.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
         self.backup_now_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.backup_now_btn.setStyleSheet(accent_btn_css())
@@ -463,7 +463,8 @@ class BackupBrowserWidget(QWidget):
                 border-radius: 4px;
             }}
             QProgressBar::chunk {{
-                background: {Colors.ACCENT};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {Colors.ACCENT}, stop:1 {Colors.ACCENT_LIGHT});
                 border-radius: 4px;
             }}
         """)
@@ -572,69 +573,6 @@ class BackupBrowserWidget(QWidget):
 
         self._stack.addWidget(self._devices_page)  # Index 3
 
-        # Store cancel button ref for theme rebuilding
-        self._cancel_btn = cancel_btn
-
-        # Connect to theme changes
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
-        self._rebuild_styles()
-
-    def _rebuild_styles(self):
-        """Rebuild inline styles from current theme palette."""
-        self._back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.ACCENT};
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
-        """)
-        self._title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
-        self._all_devices_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.ACCENT};
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
-        """)
-        self._open_folder_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: 1px solid {Colors.BORDER_SUBTLE};
-                border-radius: {Metrics.BORDER_RADIUS}px;
-            }}
-            QPushButton:hover {{ background: {Colors.SURFACE_ALT}; border-color: {Colors.BORDER}; }}
-        """)
-        self.backup_now_btn.setStyleSheet(accent_btn_css())
-        self._size_label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
-        self._progress_title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
-        self._progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {Colors.SURFACE_ALT};
-                border: none;
-                border-radius: 4px;
-            }}
-            QProgressBar::chunk {{
-                background: {Colors.ACCENT};
-                border-radius: 4px;
-            }}
-        """)
-        self._progress_file.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
-        self._progress_stats.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
-        self._progress_eta.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent;")
-        self._cancel_btn.setStyleSheet(btn_css(
-            bg=Colors.SURFACE_RAISED,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE_ALT,
-            border=f"1px solid {Colors.BORDER}",
-        ))
-        self._empty_text.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
-        self._devices_subtitle.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
-
     # ── Public API ──────────────────────────────────────────────────────
 
     def refresh(self):
@@ -737,7 +675,7 @@ class BackupBrowserWidget(QWidget):
             return
 
         # Update title
-        self._title_label.setText(f"{self._viewing_device_name}")
+        self._title_label.setText(f"⬡ {self._viewing_device_name}")
 
         # Show list page
         self._stack.setCurrentIndex(0)
@@ -791,7 +729,7 @@ class BackupBrowserWidget(QWidget):
             )
             return
 
-        self._title_label.setText("Device Backups")
+        self._title_label.setText("⬡ Device Backups")
         self._all_devices_btn.setVisible(False)  # Already on the picker page
 
         # Subtitle
@@ -818,7 +756,7 @@ class BackupBrowserWidget(QWidget):
 
     def _show_empty(self, text: str = ""):
         """Show the empty state page with optional custom text."""
-        self._title_label.setText("Device Backups")
+        self._title_label.setText("⬡ Device Backups")
         if text:
             self._empty_text.setText(text)
         self._stack.setCurrentIndex(2)
@@ -847,13 +785,13 @@ class BackupBrowserWidget(QWidget):
     # ── Stage display labels ────────────────────────────────────────────
 
     _STAGE_LABELS = {
-        "scanning": "Scanning Device",
-        "hashing": "Processing Files",
-        "verifying": "Verifying Integrity",
-        "cleaning": "Removing Changed Files",
-        "restoring": "Copying Files to iPod",
-        "no_changes": "Already Up to Date",
-        "complete": "Complete",
+        "scanning": "□ Scanning Device",
+        "hashing": "✱ Processing Files",
+        "verifying": "⌕ Verifying Integrity",
+        "cleaning": "≡ Removing Changed Files",
+        "restoring": "⇩ Copying Files to iPod",
+        "no_changes": "✓ Already Up to Date",
+        "complete": "✓ Complete",
     }
 
     # ── Backup Now ──────────────────────────────────────────────────────
@@ -889,7 +827,7 @@ class BackupBrowserWidget(QWidget):
         device_name = get_device_display_name(device.discovered_ipod)
 
         # Show progress page
-        self._progress_title.setText("Scanning Device")
+        self._progress_title.setText("□ Scanning Device")
         self._progress_bar.setRange(0, 0)  # Indeterminate until we know total
         self._progress_file.setText("Discovering files on iPod…")
         self._progress_stats.setText("")
@@ -952,7 +890,7 @@ class BackupBrowserWidget(QWidget):
         if result:
             # Show brief success screen before returning to list
             elapsed = self._format_elapsed(time.monotonic() - self._eta_start_time)
-            self._progress_title.setText("\u2713 Backup Complete")
+            self._progress_title.setText("✓ Backup Complete")
             self._progress_bar.setRange(0, 1)
             self._progress_bar.setValue(1)
             self._progress_stats.setText(
@@ -964,7 +902,7 @@ class BackupBrowserWidget(QWidget):
         elif no_changes:
             # No changes since last backup — show brief info then return
             elapsed = self._format_elapsed(time.monotonic() - self._eta_start_time)
-            self._progress_title.setText("\u2713 Already Up to Date")
+            self._progress_title.setText("✓ Already Up to Date")
             self._progress_bar.setRange(0, 1)
             self._progress_bar.setValue(1)
             self._progress_stats.setText("No files changed since last backup")
@@ -1053,7 +991,7 @@ class BackupBrowserWidget(QWidget):
             return
 
         # Show progress
-        self._progress_title.setText("Verifying Integrity")
+        self._progress_title.setText("⌕ Verifying Integrity")
         self._progress_bar.setRange(0, 0)
         self._progress_file.setText("Verifying backup integrity…")
         self._progress_stats.setText("")

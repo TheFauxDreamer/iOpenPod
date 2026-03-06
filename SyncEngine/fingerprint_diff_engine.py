@@ -137,10 +137,6 @@ class SyncPlan:
     # Used by artwork writer to extract embedded art for *every* track
     matched_pc_paths: dict[int, str] = field(default_factory=dict)
 
-    # Artwork: True if any matched track lacks art on iPod
-    artwork_needs_sync: bool = False
-    artwork_missing_count: int = 0
-
     # Errors during fingerprinting
     fingerprint_errors: list[tuple[str, str]] = field(default_factory=list)
 
@@ -186,7 +182,6 @@ class SyncPlan:
             self.to_update_artwork,
             self.to_sync_playcount,
             self.to_sync_rating,
-            self.artwork_needs_sync,
             self.playlists_to_add,
             self.playlists_to_edit,
             self.playlists_to_remove,
@@ -204,31 +199,29 @@ class SyncPlan:
     def summary(self) -> str:
         lines = []
         if self.to_add:
-            lines.append(f"  📥 {len(self.to_add)} tracks to add ({_fmt_bytes(self.storage.bytes_to_add)})")
+            lines.append(f"  ⇩ {len(self.to_add)} tracks to add ({_fmt_bytes(self.storage.bytes_to_add)})")
         if self.to_remove:
-            lines.append(f"  🗑️  {len(self.to_remove)} tracks to remove ({_fmt_bytes(self.storage.bytes_to_remove)})")
+            lines.append(f"  ✖  {len(self.to_remove)} tracks to remove ({_fmt_bytes(self.storage.bytes_to_remove)})")
         if self.to_update_file:
-            lines.append(f"  🔄 {len(self.to_update_file)} tracks to re-sync ({_fmt_bytes(self.storage.bytes_to_update)})")
+            lines.append(f"  ↻ {len(self.to_update_file)} tracks to re-sync ({_fmt_bytes(self.storage.bytes_to_update)})")
         if self.to_update_metadata:
-            lines.append(f"  📝 {len(self.to_update_metadata)} tracks with metadata updates")
+            lines.append(f"  ✎ {len(self.to_update_metadata)} tracks with metadata updates")
         if self.to_update_artwork:
-            lines.append(f"  🎨 {len(self.to_update_artwork)} tracks with artwork updates")
+            lines.append(f"  ◇ {len(self.to_update_artwork)} tracks with artwork updates")
         if self.to_sync_playcount:
-            lines.append(f"  🎵 {len(self.to_sync_playcount)} tracks with new play counts")
+            lines.append(f"  ♫ {len(self.to_sync_playcount)} tracks with new play counts")
         if self.to_sync_rating:
             lines.append(f"  ⭐ {len(self.to_sync_rating)} tracks with rating changes")
-        if self.artwork_needs_sync:
-            lines.append(f"  🖼️  {self.artwork_missing_count} tracks missing album art")
         if self.fingerprint_errors:
-            lines.append(f"  ⚠️  {len(self.fingerprint_errors)} files could not be fingerprinted")
+            lines.append(f"  ⚠  {len(self.fingerprint_errors)} files could not be fingerprinted")
         if self.playlists_to_add:
-            lines.append(f"  🎶 {len(self.playlists_to_add)} playlists to add")
+            lines.append(f"  ♬ {len(self.playlists_to_add)} playlists to add")
         if self.playlists_to_edit:
-            lines.append(f"  📝 {len(self.playlists_to_edit)} playlists to update")
+            lines.append(f"  ✎ {len(self.playlists_to_edit)} playlists to update")
         if self.playlists_to_remove:
-            lines.append(f"  🗑️  {len(self.playlists_to_remove)} playlists to remove")
+            lines.append(f"  ✖  {len(self.playlists_to_remove)} playlists to remove")
         if self.duplicates:
-            lines.append(f"  ⚠️  {len(self.duplicates)} duplicate groups ({self.duplicate_count} extra files skipped)")
+            lines.append(f"  ⚠  {len(self.duplicates)} duplicate groups ({self.duplicate_count} extra files skipped)")
         if self.unresolved_collisions:
             lines.append(f"  ❓ {len(self.unresolved_collisions)} unresolved fingerprint collisions")
 
@@ -237,11 +230,11 @@ class SyncPlan:
         if self.integrity_report and not self.integrity_report.is_clean:
             ir = self.integrity_report
             if ir.missing_files:
-                integrity_lines.append(f"  🔧 {len(ir.missing_files)} DB tracks had missing files (cleaned)")
+                integrity_lines.append(f"  ⚒ {len(ir.missing_files)} DB tracks had missing files (cleaned)")
             if ir.stale_mappings:
-                integrity_lines.append(f"  🔧 {len(ir.stale_mappings)} stale mapping entries (cleaned)")
+                integrity_lines.append(f"  ⚒ {len(ir.stale_mappings)} stale mapping entries (cleaned)")
             if ir.orphan_files:
-                integrity_lines.append(f"  🔧 {len(ir.orphan_files)} orphan files removed from iPod")
+                integrity_lines.append(f"  ⚒ {len(ir.orphan_files)} orphan files removed from iPod")
 
         if not lines and not integrity_lines:
             return "✅ Everything is in sync!"
@@ -262,10 +255,45 @@ METADATA_FIELDS: dict[str, str] = {
     "genre": "Genre",
     "year": "year",
     "track_number": "trackNumber",
+    "track_total": "totalTracks",
     "disc_number": "discNumber",
+    "disc_total": "totalDiscs",
     "composer": "Composer",
     "comment": "Comment",
     "grouping": "Grouping",
+    "bpm": "bpm",
+    "compilation": "compilation",
+    "explicit_flag": "explicitFlag",
+    # Sort fields
+    "sort_name": "Sort Title",
+    "sort_artist": "Sort Artist",
+    "sort_album": "Sort Album",
+    "sort_album_artist": "Sort Album Artist",
+    "sort_composer": "Sort Composer",
+    "sort_show": "Sort Show",
+    # Video/TV show fields
+    "show_name": "Show",
+    "season_number": "seasonNumber",
+    "episode_number": "episodeNumber",
+    "description": "Description Text",
+    "episode_id": "Episode",
+    "network_name": "TV Network",
+    # Podcast / extra string fields
+    "category": "Category",
+    "subtitle": "Subtitle",
+    "podcast_url": "Podcast Enclosure URL",
+    "lyrics": "Lyrics",
+    # Volume normalization
+    "sound_check": "soundCheck",
+}
+
+# Writer defaults for fields where "empty" on PC becomes a non-zero value
+# on iPod.  When PC is empty/None/0 and iPod has the writer default, that's
+# not a real change — the writer just filled it in.  Prevents false-positive
+# metadata diffs on every sync.
+_WRITER_DEFAULTS: dict[str, int | str] = {
+    "disc_number": 1,   # _pc_track_to_info: disc_number or 1
+    "disc_total": 1,    # _pc_track_to_info: disc_total or 1
 }
 
 
@@ -282,9 +310,12 @@ class FingerprintDiffEngine:
         print(plan.summary)
     """
 
-    def __init__(self, pc_library: PCLibrary, ipod_path: str | Path):
+    def __init__(self, pc_library: PCLibrary, ipod_path: str | Path,
+                 supports_video: bool = True, supports_podcast: bool = True):
         self.pc_library = pc_library
         self.ipod_path = Path(ipod_path)
+        self.supports_video = supports_video
+        self.supports_podcast = supports_podcast
         self.mapping_manager = MappingManager(ipod_path)
 
     # ── Public API ──────────────────────────────────────────────────────────
@@ -294,6 +325,7 @@ class FingerprintDiffEngine:
         ipod_tracks: list[dict],
         progress_callback: Optional[Callable[[str, int, int, str], None]] = None,
         write_fingerprints: bool = True,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> SyncPlan:
         """
         Compute the full sync plan.
@@ -302,6 +334,8 @@ class FingerprintDiffEngine:
             ipod_tracks: Track dicts from iTunesDB parser
             progress_callback: Optional callback(stage, current, total, message)
             write_fingerprints: Store computed fingerprints in PC file metadata
+            is_cancelled: Optional callable returning True when the caller
+                          wants to abort early.  Checked between stages.
 
         Returns:
             SyncPlan
@@ -331,7 +365,10 @@ class FingerprintDiffEngine:
             mapping,
             delete_orphans=True,
             progress_callback=progress_callback,
+            is_cancelled=is_cancelled,
         )
+        if is_cancelled and is_cancelled():
+            return plan
         if not integrity_report.is_clean:
             logger.info(integrity_report.summary)
             # Save cleaned mapping immediately so stale entries don't persist
@@ -368,12 +405,75 @@ class FingerprintDiffEngine:
                 ipod_by_dbid[dbid] = track
         plan.total_ipod_tracks = len(ipod_by_dbid)
 
+        # ── Revert GUI edits so ipod_tracks reflect the true iPod state ──
+        # update_track_flags() modifies the in-memory dicts for instant UI
+        # feedback, but we need the originals for accurate PC-vs-iPod comparison.
+        # Edits are stored as {dbid: {key: (original, new)}} — revert to originals.
+        try:
+            from GUI.app import iTunesDBCache
+            gui_cache = iTunesDBCache.get_instance()
+            gui_edits = gui_cache.get_track_edits()  # dbid → {key: (orig, new)}
+        except Exception:
+            gui_edits = {}
+
+        if gui_edits:
+            for dbid, field_edits in gui_edits.items():
+                ipod_track = ipod_by_dbid.get(dbid)
+                if ipod_track is None:
+                    continue
+                for edit_key, (orig_val, _new_val) in field_edits.items():
+                    ipod_track[edit_key] = orig_val
+            logger.info("Reverted GUI edits on %d tracks for accurate diff", len(gui_edits))
+
         # ===== Phase 1: Scan PC & fingerprint =====
+        if is_cancelled and is_cancelled():
+            return plan
+
         if progress_callback:
             progress_callback("scan_pc", 0, 0, "Scanning PC library...")
 
-        pc_tracks = list(self.pc_library.scan())
+        pc_tracks = list(self.pc_library.scan(include_video=self.supports_video))
+
+        # Filter out podcast tracks when the device doesn't support podcasts.
+        # This mirrors the include_video filter: no point syncing content the
+        # iPod can't categorise.
+        if not self.supports_podcast:
+            pc_tracks = [t for t in pc_tracks if not t.is_podcast]
+
         plan.total_pc_tracks = len(pc_tracks)
+
+        # ── Compute Sound Check for files missing loudness tags ──────
+        # Only runs when the user has enabled the "Compute Sound Check" setting.
+        try:
+            from GUI.settings import get_settings as _gs
+            _compute_sc = _gs().compute_sound_check
+            _write_back = _gs().write_back_to_pc
+        except Exception:
+            _compute_sc = False
+            _write_back = False
+
+        if _compute_sc:
+            from SyncEngine.pc_library import compute_sound_check, write_sound_check_tag
+            need_sc = [t for t in pc_tracks if not t.sound_check and not t.is_video]
+            if need_sc:
+                if progress_callback:
+                    progress_callback("sound_check", 0, len(need_sc),
+                                      f"Computing Sound Check for {len(need_sc)} files...")
+                for sc_idx, track in enumerate(need_sc):
+                    if is_cancelled and is_cancelled():
+                        break
+                    sc_val = compute_sound_check(track.path)
+                    if sc_val:
+                        # Update the in-memory PCTrack so it syncs to iPod
+                        object.__setattr__(track, "sound_check", sc_val)
+                        # Persist the tag into the PC file only if write-back is on
+                        if _write_back:
+                            write_sound_check_tag(track.path, sc_val)
+                    if progress_callback:
+                        progress_callback("sound_check", sc_idx + 1, len(need_sc),
+                                          f"Sound Check: {track.filename}")
+                logger.info("Computed Sound Check for %d / %d files",
+                            sum(1 for t in need_sc if t.sound_check), len(need_sc))
 
         # fingerprint → list[PCTrack]  (to detect PC-side duplicates)
         pc_by_fp: dict[str, list[PCTrack]] = {}
@@ -403,6 +503,12 @@ class FingerprintDiffEngine:
             futures = {pool.submit(_fingerprint_one, t): t for t in pc_tracks}
 
             for future in as_completed(futures):
+                if is_cancelled and is_cancelled():
+                    # Cancel remaining futures and bail out
+                    for f in futures:
+                        f.cancel()
+                    return plan
+
                 with completed_lock:
                     completed += 1
                     current = completed
@@ -439,6 +545,9 @@ class FingerprintDiffEngine:
                     plan.duplicates[display_key] = album_tracks
 
         # ===== Phase 3: Match & Diff =====
+        if is_cancelled and is_cancelled():
+            return plan
+
         if progress_callback:
             progress_callback("diff", 0, 0, "Computing differences...")
 
@@ -548,6 +657,20 @@ class FingerprintDiffEngine:
                     new_art_hash=pc_art_hash,
                     description=f"Art {'removed' if not pc_art_hash else 'changed'}: {pc_track.artist or 'Unknown'} - {pc_track.title or pc_track.filename}",
                 ))
+            elif pc_art_hash and (ipod_track.get("artworkCount", 0) == 0 or ipod_track.get("mhiiLink", 0) == 0):
+                # PC has art and mapping agrees (hash matches) but iPod
+                # doesn't actually have it — previous ArtworkDB write may
+                # have failed.  Emit an artwork update so it gets retried.
+                plan.to_update_artwork.append(SyncItem(
+                    action=SyncAction.UPDATE_ARTWORK,
+                    fingerprint=fp,
+                    pc_track=pc_track,
+                    dbid=dbid,
+                    ipod_track=ipod_track,
+                    old_art_hash=None,
+                    new_art_hash=pc_art_hash,
+                    description=f"Art missing on iPod: {pc_track.artist or 'Unknown'} - {pc_track.title or pc_track.filename}",
+                ))
 
             # Play count: additive (iPod→PC)
             # Deltas come from the Play Counts file (merged into the track
@@ -577,14 +700,31 @@ class FingerprintDiffEngine:
                     description=desc,
                 ))
 
-            # Rating: last-write-wins
+            # Rating: resolve conflicts using configured strategy
             ipod_rating = ipod_track.get("rating", 0)
             pc_rating = pc_track.rating or 0
             if ipod_rating != pc_rating and (ipod_rating > 0 or pc_rating > 0):
-                # Determine winner: whichever was modified more recently
-                # Since we can't track rating mtime reliably, use iPod as winner
-                # (user most recently used the device)
-                new_rating = ipod_rating if ipod_rating > 0 else pc_rating
+                # Read user's preferred conflict strategy
+                try:
+                    from GUI.settings import get_settings
+                    strategy = get_settings().rating_conflict_strategy
+                except Exception:
+                    strategy = "ipod_wins"
+
+                if strategy == "pc_wins":
+                    new_rating = pc_rating if pc_rating > 0 else ipod_rating
+                elif strategy == "highest":
+                    new_rating = max(ipod_rating, pc_rating)
+                elif strategy == "lowest":
+                    non_zero = [r for r in (ipod_rating, pc_rating) if r > 0]
+                    new_rating = min(non_zero) if non_zero else 0
+                elif strategy == "average":
+                    avg = (ipod_rating + pc_rating) / 2
+                    new_rating = round(avg / 20) * 20  # snap to nearest star step
+                    new_rating = max(0, min(100, new_rating))
+                else:  # ipod_wins (default)
+                    new_rating = ipod_rating if ipod_rating > 0 else pc_rating
+
                 plan.to_sync_rating.append(SyncItem(
                     action=SyncAction.SYNC_RATING,
                     fingerprint=fp,
@@ -598,6 +738,9 @@ class FingerprintDiffEngine:
                 ))
 
         # ===== Phase 4: Find tracks to remove =====
+        if is_cancelled and is_cancelled():
+            return plan
+
         # 4a: Fingerprints entirely absent from PC → all entries are removals
         mapping_fps = mapping.all_fingerprints()
         orphaned_fps = mapping_fps - seen_fps
@@ -681,16 +824,119 @@ class FingerprintDiffEngine:
             ))
             plan.storage.bytes_to_remove += ipod_track.get("size", 0)
 
-        # ===== Phase 5: Missing artwork check =====
-        for dbid, _pc_path in plan.matched_pc_paths.items():
-            ipod_track = ipod_by_dbid.get(dbid)
-            if ipod_track:
-                if ipod_track.get("artworkCount", 0) == 0 or ipod_track.get("mhiiLink", 0) == 0:
-                    plan.artwork_missing_count += 1
+        # ===== Phase 5: GUI edits overlay ==============================
+        # The user may have changed rating, compilation, flags, volume,
+        # start/stop times etc. via the iOpenPod GUI.  These pending edits
+        # are stored as (original, new) tuples in iTunesDBCache._track_edits.
+        #
+        # IMPORTANT: update_track_flags() modifies the in-memory track dicts
+        # for instant UI feedback, so the ipod_tracks we received already
+        # contain the GUI values.  We reverted them to originals at the top
+        # of compute_diff (before Phase 3) so the PC-vs-iPod comparison ran
+        # against the true iPod state.  Now we overlay the edits.
+        #
+        # Edits are compared against the true iPod values (originals):
+        #  - rating edits → SYNC_RATING (always wins, bypasses strategy)
+        #  - METADATA_FIELDS edits → override / supplement the PC diff
+        #  - iPod-only flags → emitted as UPDATE_METADATA directly
+        #
+        # If the same track already has a PC-driven UPDATE_METADATA item
+        # from Phase 3, the GUI edit is merged into that item (GUI wins
+        # for any overlapping field).
 
-        if plan.artwork_missing_count > 0:
-            plan.artwork_needs_sync = True
-            logger.info(f"ART: {plan.artwork_missing_count} matched tracks missing artwork")
+        if gui_edits:
+            # Reverse lookup: iPod dict key → PC field name (for METADATA_FIELDS)
+            _ipod_key_to_pc = {v: k for k, v in METADATA_FIELDS.items()}
+
+            # Index existing UPDATE_METADATA items by dbid for merge
+            meta_by_dbid: dict[int, SyncItem] = {}
+            for item in plan.to_update_metadata:
+                if item.dbid:
+                    meta_by_dbid[item.dbid] = item
+
+            # Index existing SYNC_RATING items by dbid to replace them
+            rating_by_dbid: dict[int, int] = {}
+            for idx, item in enumerate(plan.to_sync_rating):
+                if item.dbid:
+                    rating_by_dbid[item.dbid] = idx
+
+            for dbid, field_edits in gui_edits.items():
+                ipod_track = ipod_by_dbid.get(dbid)
+                if ipod_track is None:
+                    continue  # track no longer on iPod
+
+                track_name = (
+                    f"{ipod_track.get('Artist', 'Unknown')} - "
+                    f"{ipod_track.get('Title', 'Unknown')}"
+                )
+
+                for edit_key, (orig_val, new_val) in field_edits.items():
+                    # orig_val is the true iPod value (before GUI edit)
+                    if orig_val == new_val:
+                        continue  # no actual change
+
+                    # ── Rating ──
+                    if edit_key == "rating":
+                        if dbid in rating_by_dbid:
+                            # Replace existing rating item — GUI always wins
+                            idx = rating_by_dbid[dbid]
+                            plan.to_sync_rating[idx].new_rating = new_val
+                            plan.to_sync_rating[idx].pc_rating = new_val
+                            plan.to_sync_rating[idx].description = (
+                                f"Rating (edited in iOpenPod): {track_name}"
+                            )
+                        else:
+                            plan.to_sync_rating.append(SyncItem(
+                                action=SyncAction.SYNC_RATING,
+                                dbid=dbid,
+                                ipod_track=ipod_track,
+                                ipod_rating=orig_val if orig_val else 0,
+                                pc_rating=new_val,
+                                new_rating=new_val,
+                                description=f"Rating (edited in iOpenPod): {track_name}",
+                            ))
+                        continue
+
+                    # ── Metadata field or iPod-only flag ──
+                    # Use the PC field name if available, otherwise the
+                    # raw track-dict key (for iPod-only fields).
+                    pc_field = _ipod_key_to_pc.get(edit_key, edit_key)
+
+                    if dbid in meta_by_dbid:
+                        # Merge into existing UPDATE_METADATA item
+                        meta_by_dbid[dbid].metadata_changes[pc_field] = (
+                            new_val, orig_val
+                        )
+                        # Update description
+                        fields_str = ", ".join(
+                            meta_by_dbid[dbid].metadata_changes.keys()
+                        )
+                        meta_by_dbid[dbid].description = (
+                            f"Metadata: {track_name} ({fields_str})"
+                        )
+                    else:
+                        new_item = SyncItem(
+                            action=SyncAction.UPDATE_METADATA,
+                            dbid=dbid,
+                            ipod_track=ipod_track,
+                            metadata_changes={pc_field: (new_val, orig_val)},
+                            description=f"Metadata (edited in iOpenPod): {track_name} ({pc_field})",
+                        )
+                        plan.to_update_metadata.append(new_item)
+                        meta_by_dbid[dbid] = new_item
+
+            logger.info("GUI edit overlay: processed %d edited tracks", len(gui_edits))
+
+        # ── Restore GUI edits on in-memory track dicts ──────────────────
+        # Phase 3 ran against the true iPod values; now put the GUI values
+        # back so the UI still shows what the user set.
+        if gui_edits:
+            for dbid, field_edits in gui_edits.items():
+                ipod_track = ipod_by_dbid.get(dbid)
+                if ipod_track is None:
+                    continue
+                for edit_key, (_orig_val, new_val) in field_edits.items():
+                    ipod_track[edit_key] = new_val
 
         # Attach the mapping so the executor can reuse it instead of
         # loading from disk a second time.
@@ -767,11 +1013,25 @@ class FingerprintDiffEngine:
             pc_value = getattr(pc_track, pc_field, None)
             ipod_value = ipod_track.get(ipod_field)
 
-            # Normalize
+            # Normalize None → ""
             if pc_value is None:
                 pc_value = ""
             if ipod_value is None:
                 ipod_value = ""
+
+            # Treat "" and 0 as equivalent "empty" values
+            if pc_value == "" and ipod_value == 0:
+                continue
+            if pc_value == 0 and ipod_value == "":
+                continue
+
+            # If PC is empty and iPod has the writer default for this field,
+            # it's not a real change — the writer just filled in the default.
+            if pc_field in _WRITER_DEFAULTS:
+                writer_default = _WRITER_DEFAULTS[pc_field]
+                pc_empty = pc_value in ("", 0, None)
+                if pc_empty and ipod_value == writer_default:
+                    continue
 
             if isinstance(pc_value, str) and isinstance(ipod_value, str):
                 if pc_value.strip() != ipod_value.strip():
