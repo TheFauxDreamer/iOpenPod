@@ -9,6 +9,7 @@ from PyQt6.QtCore import pyqtSignal, pyqtSlot, Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QComboBox, QFrame, QScrollArea, QFileDialog,
+    QStackedWidget, QSizePolicy,
 )
 from PyQt6.QtGui import QFont
 from pathlib import Path
@@ -398,16 +399,22 @@ class ToolRow(SettingRow):
 
 # ── Main settings page ─────────────────────────────────────────────────────
 
+_CATEGORIES = ["General", "Sync", "Transcoding", "Appearance", "Storage", "Backups"]
+_SIDEBAR_W = 180
+
+
 class SettingsPage(QWidget):
-    """Full-page settings view, matching the app's dark translucent style."""
+    """Full-page settings view with iOS-style sidebar + content split."""
 
     closed = pyqtSignal()  # Emitted when user closes settings
 
     def __init__(self):
         super().__init__()
+        self._active_index = 0
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
         # ── Title bar ───────────────────────────────────────────────────────
         title_bar = QWidget()
@@ -436,14 +443,63 @@ class SettingsPage(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tb_layout.addWidget(title, stretch=1)
 
-        # Spacer to balance the back button
         spacer = QWidget()
         spacer.setFixedWidth(60)
         tb_layout.addWidget(spacer)
 
         outer.addWidget(title_bar)
 
-        # ── Scrollable content ──────────────────────────────────────────────
+        # ── Body: sidebar + content ─────────────────────────────────────────
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+
+        # Sidebar
+        self._sidebar = QFrame()
+        self._sidebar.setFixedWidth(_SIDEBAR_W)
+        self._sidebar.setStyleSheet("background: transparent;")
+        sidebar_layout = QVBoxLayout(self._sidebar)
+        sidebar_layout.setContentsMargins(12, 8, 0, 8)
+        sidebar_layout.setSpacing(2)
+
+        self._cat_buttons: list[QPushButton] = []
+        for i, name in enumerate(_CATEGORIES):
+            btn = QPushButton(name)
+            btn.setFont(QFont(FONT_FAMILY, 11))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, idx=i: self._onCategorySelected(idx))
+            self._cat_buttons.append(btn)
+            sidebar_layout.addWidget(btn)
+
+        sidebar_layout.addStretch()
+        body.addWidget(self._sidebar)
+
+        # Content stack
+        self._stack = QStackedWidget()
+        self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self._stack.addWidget(self._build_general_panel())    # 0
+        self._stack.addWidget(self._build_sync_panel())       # 1
+        self._stack.addWidget(self._build_transcoding_panel())  # 2
+        self._stack.addWidget(self._build_appearance_panel())   # 3
+        self._stack.addWidget(self._build_storage_panel())      # 4
+        self._stack.addWidget(self._build_backups_panel())      # 5
+
+        body.addWidget(self._stack)
+        outer.addLayout(body)
+
+        # Set initial selection
+        self._onCategorySelected(0)
+
+        # Theme changes
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+
+    # ── Panel builders ──────────────────────────────────────────────────────
+
+    def _wrap_in_scroll(self, panel: QWidget) -> QScrollArea:
+        """Wrap a panel widget in a styled scroll area."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -451,14 +507,20 @@ class SettingsPage(QWidget):
             QScrollArea { background: transparent; border: none; }
             QScrollArea > QWidget > QWidget { background: transparent; }
         """)
+        scroll.setWidget(panel)
+        return scroll
 
-        content = QWidget()
-        content.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(content)
+    def _make_panel_layout(self) -> tuple[QWidget, QVBoxLayout]:
+        """Create a panel widget + layout with standard margins."""
+        panel = QWidget()
+        panel.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 8, 24, 24)
         layout.setSpacing(12)
+        return panel, layout
 
-        # ── EXTERNAL TOOLS section ──────────────────────────────────────────
+    def _build_general_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
         layout.addWidget(self._section_label("EXTERNAL TOOLS"))
 
         self.ffmpeg_tool = ToolRow(
@@ -489,7 +551,11 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.fpcalc_path)
 
-        # ── SYNC section ────────────────────────────────────────────────────
+        layout.addStretch()
+        return self._wrap_in_scroll(panel)
+
+    def _build_sync_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
         layout.addWidget(self._section_label("SYNC"))
 
         self.music_folder = FolderRow(
@@ -523,7 +589,11 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.rating_strategy)
 
-        # ── TRANSCODING section ─────────────────────────────────────────────
+        layout.addStretch()
+        return self._wrap_in_scroll(panel)
+
+    def _build_transcoding_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
         layout.addWidget(self._section_label("TRANSCODING"))
 
         self.aac_bitrate = ComboRow(
@@ -561,15 +631,12 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.sync_workers)
 
-        # ── APPEARANCE section ──────────────────────────────────────────────
-        layout.addWidget(self._section_label("APPEARANCE"))
+        layout.addStretch()
+        return self._wrap_in_scroll(panel)
 
-        self.show_art = ToggleRow(
-            "Track List Artwork",
-            "Show album art thumbnails next to tracks in the list view.",
-            checked=True,
-        )
-        layout.addWidget(self.show_art)
+    def _build_appearance_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
+        layout.addWidget(self._section_label("APPEARANCE"))
 
         self.theme_mode = ComboRow(
             "Theme",
@@ -587,7 +654,18 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.accent_color)
 
-        # ── STORAGE section ─────────────────────────────────────────────────
+        self.show_art = ToggleRow(
+            "Track List Artwork",
+            "Show album art thumbnails next to tracks in the list view.",
+            checked=True,
+        )
+        layout.addWidget(self.show_art)
+
+        layout.addStretch()
+        return self._wrap_in_scroll(panel)
+
+    def _build_storage_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
         layout.addWidget(self._section_label("STORAGE"))
 
         self.transcode_cache_dir = FolderRow(
@@ -627,7 +705,11 @@ class SettingsPage(QWidget):
         self.reset_cache_dir_btn.clicked.connect(self._reset_storage_defaults)
         layout.addWidget(self.reset_cache_dir_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
-        # ── BACKUPS section ────────────────────────────────────────────────────────────
+        layout.addStretch()
+        return self._wrap_in_scroll(panel)
+
+    def _build_backups_panel(self) -> QScrollArea:
+        panel, layout = self._make_panel_layout()
         layout.addWidget(self._section_label("BACKUPS"))
 
         self.backup_dir = FolderRow(
@@ -655,14 +737,63 @@ class SettingsPage(QWidget):
         layout.addWidget(self.max_backups)
 
         layout.addStretch()
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
+        return self._wrap_in_scroll(panel)
+
+    # ── Sidebar ─────────────────────────────────────────────────────────────
+
+    def _onCategorySelected(self, index: int):
+        """Switch the content panel and update sidebar button styles."""
+        self._active_index = index
+        self._stack.setCurrentIndex(index)
+        self._apply_sidebar_styles()
+
+    def _apply_sidebar_styles(self):
+        """Style all sidebar buttons based on active state."""
+        for i, btn in enumerate(self._cat_buttons):
+            if i == self._active_index:
+                btn.setChecked(True)
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {Colors.SURFACE_ALT};
+                        color: {Colors.TEXT_PRIMARY};
+                        border: none;
+                        border-left: 3px solid {Colors.ACCENT};
+                        border-radius: 0px;
+                        text-align: left;
+                        padding: 8px 12px 8px 9px;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background: {Colors.SURFACE_HOVER};
+                    }}
+                """)
+            else:
+                btn.setChecked(False)
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: transparent;
+                        color: {Colors.TEXT_SECONDARY};
+                        border: none;
+                        border-left: 3px solid transparent;
+                        border-radius: 0px;
+                        text-align: left;
+                        padding: 8px 12px 8px 9px;
+                    }}
+                    QPushButton:hover {{
+                        background: {Colors.SURFACE_HOVER};
+                        color: {Colors.TEXT_PRIMARY};
+                    }}
+                """)
 
     def _section_label(self, text: str) -> QLabel:
         label = QLabel(text)
         label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
         label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
         return label
+
+    def _rebuild_styles(self):
+        """Rebuild theme-sensitive inline styles on theme/accent change."""
+        self._apply_sidebar_styles()
 
     def load_from_settings(self):
         """Populate UI controls from the current AppSettings."""
