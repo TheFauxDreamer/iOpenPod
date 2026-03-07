@@ -187,7 +187,6 @@ class FolderRow(SettingRow):
 
         self.path_label = QLabel(self._truncate(path) if path else "Not set")
         self.path_label.setFont(QFont(FONT_FAMILY, 9))
-        self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
         self.path_label.setMinimumWidth(120)
         self.path_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         right_layout.addWidget(self.path_label)
@@ -195,13 +194,6 @@ class FolderRow(SettingRow):
         self.browse_btn = QPushButton("Browse…")
         self.browse_btn.setFont(QFont(FONT_FAMILY, 9))
         self.browse_btn.setFixedWidth(80)
-        self.browse_btn.setStyleSheet(btn_css(
-            bg=Colors.SURFACE_RAISED,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE_ALT,
-            border=f"1px solid {Colors.BORDER}",
-            padding="4px 8px",
-        ))
         self.browse_btn.clicked.connect(self._browse)
         right_layout.addWidget(self.browse_btn)
 
@@ -210,6 +202,19 @@ class FolderRow(SettingRow):
         self.add_control(container)
 
         self._full_path = path
+        self._rebuild_folder_style()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_folder_style)
+
+    def _rebuild_folder_style(self):
+        self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self.browse_btn.setStyleSheet(btn_css(
+            bg=Colors.SURFACE_RAISED,
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE_ALT,
+            border=f"1px solid {Colors.BORDER}",
+            padding="4px 8px",
+        ))
 
     def _truncate(self, path: str) -> str:
         if len(path) > 40:
@@ -248,6 +253,14 @@ class ActionRow(SettingRow):
         self.action_btn.setFont(QFont(FONT_FAMILY, 9))
         self.action_btn.setFixedWidth(100)
         self.action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.action_btn.clicked.connect(self.clicked.emit)
+        self.add_control(self.action_btn)
+
+        self._rebuild_action_style()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_action_style)
+
+    def _rebuild_action_style(self):
         self.action_btn.setStyleSheet(btn_css(
             bg=Colors.SURFACE_RAISED,
             bg_hover=Colors.SURFACE_ACTIVE,
@@ -255,8 +268,6 @@ class ActionRow(SettingRow):
             border=f"1px solid {Colors.BORDER}",
             padding="5px 12px",
         ))
-        self.action_btn.clicked.connect(self.clicked.emit)
-        self.add_control(self.action_btn)
 
     def set_enabled(self, enabled: bool):
         """Enable or disable the action button."""
@@ -278,7 +289,6 @@ class FileRow(SettingRow):
 
         self.path_label = QLabel(self._truncate(path) if path else "Auto-detect")
         self.path_label.setFont(QFont(FONT_FAMILY, 9))
-        self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
         self.path_label.setMinimumWidth(120)
         self.path_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         right_layout.addWidget(self.path_label)
@@ -286,13 +296,6 @@ class FileRow(SettingRow):
         self.browse_btn = QPushButton("Browse…")
         self.browse_btn.setFont(QFont(FONT_FAMILY, 9))
         self.browse_btn.setFixedWidth(80)
-        self.browse_btn.setStyleSheet(btn_css(
-            bg=Colors.SURFACE_RAISED,
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE_ALT,
-            border=f"1px solid {Colors.BORDER}",
-            padding="4px 8px",
-        ))
         self.browse_btn.clicked.connect(self._browse)
         right_layout.addWidget(self.browse_btn)
 
@@ -300,14 +303,6 @@ class FileRow(SettingRow):
         self.clear_btn.setFont(QFont(FONT_FAMILY, 9))
         self.clear_btn.setFixedWidth(28)
         self.clear_btn.setToolTip("Reset to auto-detect")
-        self.clear_btn.setStyleSheet(btn_css(
-            bg="transparent",
-            bg_hover=Colors.SURFACE_ACTIVE,
-            bg_press=Colors.SURFACE_ALT,
-            fg=Colors.TEXT_TERTIARY,
-            border="none",
-            padding="2px",
-        ))
         self.clear_btn.clicked.connect(self._clear)
         right_layout.addWidget(self.clear_btn)
 
@@ -316,6 +311,27 @@ class FileRow(SettingRow):
         self.add_control(container)
 
         self._full_path = path
+        self._rebuild_file_style()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_file_style)
+
+    def _rebuild_file_style(self):
+        self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self.browse_btn.setStyleSheet(btn_css(
+            bg=Colors.SURFACE_RAISED,
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE_ALT,
+            border=f"1px solid {Colors.BORDER}",
+            padding="4px 8px",
+        ))
+        self.clear_btn.setStyleSheet(btn_css(
+            bg="transparent",
+            bg_hover=Colors.SURFACE_ACTIVE,
+            bg_press=Colors.SURFACE_ALT,
+            fg=Colors.TEXT_TERTIARY,
+            border="none",
+            padding="2px",
+        ))
 
     def _truncate(self, path: str) -> str:
         if len(path) > 40:
@@ -354,6 +370,7 @@ class ToolRow(SettingRow):
 
     def __init__(self, title: str, description: str = ""):
         super().__init__(title, description)
+        self._status_found: bool | None = None  # Track current status for theme rebuild
 
         right_layout = QHBoxLayout()
         right_layout.setSpacing(8)
@@ -367,14 +384,6 @@ class ToolRow(SettingRow):
         self.download_btn.setFont(QFont(FONT_FAMILY, 9))
         self.download_btn.setFixedWidth(90)
         self.download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.download_btn.setStyleSheet(btn_css(
-            bg=Colors.ACCENT,
-            bg_hover=Colors.ACCENT_LIGHT,
-            bg_press=Colors.ACCENT,
-            fg="#000000",
-            border="none",
-            padding="4px 8px",
-        ))
         self.download_btn.clicked.connect(self.download_clicked.emit)
         self.download_btn.hide()
         right_layout.addWidget(self.download_btn)
@@ -383,8 +392,30 @@ class ToolRow(SettingRow):
         container.setLayout(right_layout)
         self.add_control(container)
 
+        self._rebuild_tool_style()
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_tool_style)
+
+    def _rebuild_tool_style(self):
+        self.download_btn.setStyleSheet(btn_css(
+            bg=Colors.ACCENT,
+            bg_hover=Colors.ACCENT_LIGHT,
+            bg_press=Colors.ACCENT,
+            fg="#000000",
+            border="none",
+            padding="4px 8px",
+        ))
+        # Re-apply status color based on current state
+        if self._status_found is True:
+            self.status_label.setStyleSheet(f"color: {Colors.SUCCESS}; background: transparent; border: none;")
+        elif self._status_found is False:
+            self.status_label.setStyleSheet(f"color: {Colors.WARNING}; background: transparent; border: none;")
+        else:
+            self.status_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+
     def set_status(self, found: bool, path: str = ""):
         """Update the status display."""
+        self._status_found = found
         if found:
             display = path if len(path) <= 40 else "…" + path[-38:]
             self.status_label.setText(f"✓ {display}")
@@ -397,6 +428,7 @@ class ToolRow(SettingRow):
 
     def set_downloading(self):
         """Show downloading state."""
+        self._status_found = None
         self.download_btn.setEnabled(False)
         self.download_btn.setText("Downloading…")
         self.status_label.setText("Downloading…")
@@ -428,26 +460,16 @@ class SettingsPage(QWidget):
         tb_layout = QHBoxLayout(title_bar)
         tb_layout.setContentsMargins(24, 16, 24, 8)
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFont(QFont(FONT_FAMILY, 11))
-        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {Colors.ACCENT};
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
-        """)
-        back_btn.clicked.connect(self._on_close)
-        tb_layout.addWidget(back_btn)
+        self._back_btn = QPushButton("← Back")
+        self._back_btn.setFont(QFont(FONT_FAMILY, 11))
+        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._back_btn.clicked.connect(self._on_close)
+        tb_layout.addWidget(self._back_btn)
 
-        title = QLabel("Settings")
-        title.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tb_layout.addWidget(title, stretch=1)
+        self._title_label = QLabel("Settings")
+        self._title_label.setFont(QFont(FONT_FAMILY, 18, QFont.Weight.Bold))
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tb_layout.addWidget(self._title_label, stretch=1)
 
         spacer = QWidget()
         spacer.setFixedWidth(60)
@@ -495,12 +517,12 @@ class SettingsPage(QWidget):
         body.addWidget(self._stack)
         outer.addLayout(body)
 
-        # Set initial selection
+        # Set initial selection and apply styles
         self._onCategorySelected(0)
 
-        # Theme changes
         from ..theme import ThemeManager
         ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
+        self._rebuild_styles()  # Apply initial theme styles
 
     # ── Panel builders ──────────────────────────────────────────────────────
 
@@ -795,11 +817,38 @@ class SettingsPage(QWidget):
         label = QLabel(text)
         label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.Bold))
         label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
+        if not hasattr(self, '_section_labels'):
+            self._section_labels = []
+        self._section_labels.append(label)
         return label
 
     def _rebuild_styles(self):
         """Rebuild theme-sensitive inline styles on theme/accent change."""
         self._apply_sidebar_styles()
+        # Title bar
+        self._back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {Colors.ACCENT};
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{ color: {Colors.ACCENT_LIGHT}; }}
+        """)
+        self._title_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
+        # Section labels
+        for lbl in getattr(self, '_section_labels', []):
+            lbl.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; background: transparent; padding-left: 4px; padding-top: 8px;")
+        # Reset button
+        if hasattr(self, 'reset_cache_dir_btn'):
+            self.reset_cache_dir_btn.setStyleSheet(btn_css(
+                bg=Colors.SURFACE,
+                bg_hover=Colors.SURFACE_RAISED,
+                bg_press=Colors.SURFACE_ALT,
+                fg=Colors.TEXT_SECONDARY,
+                border=f"1px solid {Colors.BORDER}",
+                padding="4px 8px",
+            ))
 
     def load_from_settings(self):
         """Populate UI controls from the current AppSettings."""
