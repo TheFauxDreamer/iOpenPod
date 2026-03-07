@@ -9,6 +9,7 @@ class ScrollingLabel(QLabel):
         super().__init__(text, parent)
         self._offset = 0
         self.animation_group = None
+        self._auto_scroll = False
         self.setToolTip(text)
 
     def getOffset(self):
@@ -39,58 +40,84 @@ class ScrollingLabel(QLabel):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 self.text())
 
-    def enterEvent(self, event: QEnterEvent | None):
+    def setAutoScroll(self, enabled: bool):
+        """Enable auto-scrolling when text overflows (no hover needed)."""
+        self._auto_scroll = enabled
+        if enabled:
+            self._start_scroll_if_needed()
+        else:
+            self._stop_scroll()
+
+    def setText(self, text: str):
+        super().setText(text)
+        self.setToolTip(text)
+        if self._auto_scroll:
+            # Delay slightly so layout has settled and width is correct
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self._start_scroll_if_needed)
+
+    def _start_scroll_if_needed(self):
+        """Start scrolling animation if text overflows."""
         fm = QFontMetrics(self.font())
         full_width = fm.horizontalAdvance(self.text())
-        if full_width > self.width():
-            scroll_distance = full_width - self.width()
-            scroll_speed = 0.025  # pixels per millisecond (slower)
-            duration = int(scroll_distance / scroll_speed)
-            pause_duration = 1200  # ms to pause at each end
+        if full_width > self.width() > 0:
+            self._start_scroll_animation(full_width - self.width())
 
-            if self.animation_group is not None and self.animation_group.state() == QAbstractAnimation.State.Running:
-                self.animation_group.stop()
+    def _stop_scroll(self):
+        if self.animation_group is not None:
+            self.animation_group.stop()
+            self.animation_group.deleteLater()
+            self.animation_group = None
+            self.setOffset(0)
 
-            if self.animation_group is not None:
-                self.animation_group.deleteLater()
+    def _start_scroll_animation(self, scroll_distance: int):
+        """Create and start the scroll animation for the given distance."""
+        scroll_speed = 0.025  # pixels per millisecond
+        duration = int(scroll_distance / scroll_speed)
+        pause_duration = 1200  # ms to pause at each end
 
-            # Create sequential animation: pause -> scroll right -> pause -> scroll left -> loop
-            self.animation_group = QSequentialAnimationGroup(self)
+        if self.animation_group is not None and self.animation_group.state() == QAbstractAnimation.State.Running:
+            self.animation_group.stop()
+        if self.animation_group is not None:
+            self.animation_group.deleteLater()
 
-            # Initial pause at start
-            start_pause = QPauseAnimation(pause_duration)
-            self.animation_group.addAnimation(start_pause)
+        self.animation_group = QSequentialAnimationGroup(self)
 
-            # Scroll forward (left to right, revealing end of text)
-            forward_anim = QPropertyAnimation(self, b"offset")
-            forward_anim.setDuration(duration)
-            forward_anim.setStartValue(0)
-            forward_anim.setEndValue(scroll_distance)
-            forward_anim.setEasingCurve(QEasingCurve.Type.InOutSine)  # Gentler easing
-            self.animation_group.addAnimation(forward_anim)
+        start_pause = QPauseAnimation(pause_duration)
+        self.animation_group.addAnimation(start_pause)
 
-            # Pause at end
-            end_pause = QPauseAnimation(pause_duration)
-            self.animation_group.addAnimation(end_pause)
+        forward_anim = QPropertyAnimation(self, b"offset")
+        forward_anim.setDuration(duration)
+        forward_anim.setStartValue(0)
+        forward_anim.setEndValue(scroll_distance)
+        forward_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
+        self.animation_group.addAnimation(forward_anim)
 
-            # Scroll backward (right to left, back to start)
-            backward_anim = QPropertyAnimation(self, b"offset")
-            backward_anim.setDuration(duration)
-            backward_anim.setStartValue(scroll_distance)
-            backward_anim.setEndValue(0)
-            backward_anim.setEasingCurve(QEasingCurve.Type.InOutSine)  # Gentler easing
-            self.animation_group.addAnimation(backward_anim)
+        end_pause = QPauseAnimation(pause_duration)
+        self.animation_group.addAnimation(end_pause)
 
-            # Pause at start before looping
-            loop_pause = QPauseAnimation(pause_duration)
-            self.animation_group.addAnimation(loop_pause)
+        backward_anim = QPropertyAnimation(self, b"offset")
+        backward_anim.setDuration(duration)
+        backward_anim.setStartValue(scroll_distance)
+        backward_anim.setEndValue(0)
+        backward_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
+        self.animation_group.addAnimation(backward_anim)
 
-            self.animation_group.setLoopCount(-1)
-            self.animation_group.start()
+        loop_pause = QPauseAnimation(pause_duration)
+        self.animation_group.addAnimation(loop_pause)
+
+        self.animation_group.setLoopCount(-1)
+        self.animation_group.start()
+
+    def enterEvent(self, event: QEnterEvent | None):
+        if not self._auto_scroll:
+            fm = QFontMetrics(self.font())
+            full_width = fm.horizontalAdvance(self.text())
+            if full_width > self.width():
+                self._start_scroll_animation(full_width - self.width())
         super().enterEvent(event)
 
     def leaveEvent(self, a0):
-        if self.animation_group is not None:
-            self.animation_group.stop()
-            self.setOffset(0)
+        if not self._auto_scroll:
+            self._stop_scroll()
         super().leaveEvent(a0)

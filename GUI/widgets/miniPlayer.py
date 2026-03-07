@@ -100,16 +100,19 @@ class MiniPlayer(QFrame):
         self._title_label = ScrollingLabel("\u2014")
         self._title_label.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
         self._title_label.setFixedHeight(18)
+        self._title_label.setAutoScroll(True)
         info_col.addWidget(self._title_label)
 
         self._artist_label = ScrollingLabel("")
         self._artist_label.setFont(QFont(FONT_FAMILY, 9))
         self._artist_label.setFixedHeight(16)
+        self._artist_label.setAutoScroll(True)
         info_col.addWidget(self._artist_label)
 
         self._album_label = ScrollingLabel("")
         self._album_label.setFont(QFont(FONT_FAMILY, 9))
         self._album_label.setFixedHeight(16)
+        self._album_label.setAutoScroll(True)
         info_col.addWidget(self._album_label)
 
         info_widget = QWidget()
