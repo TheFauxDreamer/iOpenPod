@@ -157,7 +157,7 @@ class MusicBrowser(QFrame):
             self.browserTrack.clearTable()
             self.browserTrack.clearFilter()
             self.browserTrack.resetDominantColor()
-            self.browserTrack.loadTracks(cache=cache)
+            self.browserTrack.loadTracks()
         elif category == "Playlists":
             self.stack.setCurrentIndex(2)
             self.playlistBrowser.loadPlaylists()
