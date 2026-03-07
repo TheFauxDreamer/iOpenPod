@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 
 from ..styles import Colors, FONT_FAMILY, Metrics
 from .formatters import format_duration_mmss
+from .scrollingLabel import ScrollingLabel
 
 log = logging.getLogger(__name__)
 
@@ -94,15 +95,22 @@ class MiniPlayer(QFrame):
 
         info_col = QVBoxLayout()
         info_col.setContentsMargins(0, 0, 0, 0)
-        info_col.setSpacing(1)
+        info_col.setSpacing(0)
 
-        self._title_label = QLabel("—")
-        self._title_label.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
+        self._title_label = ScrollingLabel("\u2014")
+        self._title_label.setFont(QFont(FONT_FAMILY, 10, QFont.Weight.DemiBold))
+        self._title_label.setFixedHeight(18)
         info_col.addWidget(self._title_label)
 
-        self._artist_label = QLabel("")
+        self._artist_label = ScrollingLabel("")
         self._artist_label.setFont(QFont(FONT_FAMILY, 9))
+        self._artist_label.setFixedHeight(16)
         info_col.addWidget(self._artist_label)
+
+        self._album_label = ScrollingLabel("")
+        self._album_label.setFont(QFont(FONT_FAMILY, 9))
+        self._album_label.setFixedHeight(16)
+        info_col.addWidget(self._album_label)
 
         info_widget = QWidget()
         info_widget.setLayout(info_col)
@@ -195,6 +203,8 @@ class MiniPlayer(QFrame):
             f"color: {Colors.TEXT_PRIMARY}; background: transparent; border: none;")
         self._artist_label.setStyleSheet(
             f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        self._album_label.setStyleSheet(
+            f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
         self._pos_label.setStyleSheet(
             f"color: {Colors.TEXT_TERTIARY}; background: transparent; border: none;")
         self._dur_label.setStyleSheet(
@@ -260,10 +270,8 @@ class MiniPlayer(QFrame):
     def _on_track_changed(self, track: dict):
         self._current_track = track
         self._title_label.setText(track.get("Title", "Unknown"))
-        artist = track.get("Artist", "")
-        album = track.get("Album", "")
-        parts = [p for p in (artist, album) if p]
-        self._artist_label.setText(" — ".join(parts) if parts else "")
+        self._artist_label.setText(track.get("Artist", ""))
+        self._album_label.setText(track.get("Album", ""))
         self._load_artwork(track)
         self.show()
 
