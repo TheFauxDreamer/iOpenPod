@@ -570,7 +570,7 @@ class MusicBrowserList(QFrame):
     # Public API - Loading and Filtering
     # -------------------------------------------------------------------------
 
-    def loadTracks(self, media_type_filter: int | None = None) -> None:
+    def loadTracks(self, media_type_filter: int | None = None, cache=None) -> None:
         """Load all tracks from the cache and apply current filter.
 
         Args:
@@ -578,10 +578,11 @@ class MusicBrowserList(QFrame):
                                has this bit set (bitwise AND).  mediaType 0
                                ("Audio/Video") passes both audio and video
                                filters, matching iTunes behaviour.
+            cache: Optional cache instance. Defaults to iTunesDBCache.
         """
-        from ..app import iTunesDBCache
-
-        cache = iTunesDBCache.get_instance()
+        if cache is None:
+            from ..app import iTunesDBCache
+            cache = iTunesDBCache.get_instance()
         if not cache.is_ready():
             return
 

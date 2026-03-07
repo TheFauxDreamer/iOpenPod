@@ -43,6 +43,8 @@ class MusicBrowserGrid(QFrame):
         self._pending_index = 0
         self._pending_load_id = 0
         self._pending_category: str | None = None  # Category being built (for widget cache)
+        self._reattach_index = 0
+        self._reattach_load_id = 0
 
         # Expansion state
         self._expander = AlbumExpanderPanel(self)
@@ -79,11 +81,11 @@ class MusicBrowserGrid(QFrame):
                 self.gridItems = cached_widgets
                 self.columnCount = max(1, self._get_available_width() // _CELL_W)
                 self._update_margins()
-                for i, grid_item in enumerate(self.gridItems):
-                    row = i // self.columnCount
-                    col = i % self.columnCount
-                    self.gridLayout.addWidget(grid_item, row, col)
-                    grid_item.show()
+                # Batch the reattach to avoid freezing with 2000+ widgets
+                self._load_id += 1
+                self._reattach_index = 0
+                self._reattach_load_id = self._load_id
+                self._reattachBatch()
                 return
 
         # No cached widgets — build fresh
@@ -185,6 +187,7 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
+            self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
         self._pending_index = end
 
@@ -198,6 +201,29 @@ class MusicBrowserGrid(QFrame):
                 self._pending_category = None
             self._pending_items = None
             log.debug(f"populateGrid() finished: {len(self.gridItems)} widgets created")
+
+    def _reattachBatch(self):
+        """Re-add cached widgets to the layout in batches."""
+        if self._load_id != self._reattach_load_id:
+            return
+
+        start = self._reattach_index
+        end = min(start + self._BATCH_SIZE, len(self.gridItems))
+
+        for i in range(start, end):
+            grid_item = self.gridItems[i]
+            row = i // self.columnCount
+            col = i % self.columnCount
+            self.gridLayout.addWidget(grid_item, row, col)
+            self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
+            grid_item.show()
+
+        self._reattach_index = end
+
+        if end < len(self.gridItems):
+            QTimer.singleShot(0, self._reattachBatch)
+        else:
+            log.debug(f"_reattachBatch() finished: {len(self.gridItems)} widgets reattached")
 
     def _detach_widgets(self):
         """Remove all grid items from layout without destroying them."""
@@ -314,8 +340,9 @@ class MusicBrowserGrid(QFrame):
             self._expand_album(item_data, cache)
         elif category == "Artists":
             self._expand_artist(item_data, cache)
+        elif category == "Genres":
+            self._expand_genre(item_data, cache)
         else:
-            # Genres or other — just show tracks
             self._expand_album(item_data, cache)
 
     def _expand_album(self, item_data: dict, cache):
@@ -388,6 +415,32 @@ class MusicBrowserGrid(QFrame):
 
         self._expander.show_artist(artist, albums_with_tracks)
 
+    def _expand_genre(self, item_data: dict, cache):
+        """Expand to show a genre's tracks grouped by album."""
+        genre = item_data.get("filter_value") or item_data.get("title", "")
+        genre_index = cache.get_genre_index()
+        all_tracks = genre_index.get(genre, [])
+
+        if not all_tracks:
+            return
+
+        # Group tracks by album (same pattern as _expand_artist)
+        albums: dict[str, list[dict]] = {}
+        for track in all_tracks:
+            album_name = track.get("Album", "Unknown Album")
+            albums.setdefault(album_name, []).append(track)
+
+        albums_with_tracks = []
+        for album_name, tracks in sorted(albums.items()):
+            year = next((t.get("year") for t in tracks if t.get("year")), None)
+            album_data = {
+                "title": album_name,
+                "year": year,
+            }
+            albums_with_tracks.append((album_data, tracks))
+
+        self._expander.show_artist(genre, albums_with_tracks)
+
     def collapseExpander(self):
         """Collapse the expansion panel."""
         if self._expanded_item_index < 0:
@@ -403,6 +456,7 @@ class MusicBrowserGrid(QFrame):
             row = i // self.columnCount
             col = i % self.columnCount
             self.gridLayout.addWidget(grid_item, row, col)
+            self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
     def _get_available_width(self) -> int:
         parent = self.parent()
