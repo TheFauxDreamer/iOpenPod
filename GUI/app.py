@@ -1203,18 +1203,27 @@ class MainWindow(QMainWindow):
         self.musicBrowser.browserGrid.track_play_requested.connect(
             self._onTrackPlayRequested)
 
-        # Default to Library view — load from disk cache first for instant startup
+        # Default to Library view — load from disk cache in background
         self.musicBrowser.setDataSource("library")
         if settings.music_folder:
-            loaded = self._pc_cache.load_from_disk(settings.music_folder)
-            if loaded > 0:
-                # UI can display immediately from cached data
-                self.musicBrowser.onDataReady(force=True)
-            # Start background diff scan to detect changes
-            if not self._pc_cache.is_loading():
-                if loaded == 0:
-                    self._showScanProgress()
-                self._pc_cache.start_scan(settings.music_folder)
+            self.musicBrowser._show_empty("Loading your music library...")
+            _music_folder = settings.music_folder
+
+            def _bg_load_cache(folder):
+                return self._pc_cache.load_from_disk(folder)
+
+            def _on_cache_loaded(loaded):
+                if loaded and loaded > 0:
+                    self.musicBrowser.onDataReady(force=True)
+                # Start background diff scan to detect changes
+                if not self._pc_cache.is_loading():
+                    if not loaded:
+                        self._showScanProgress()
+                    self._pc_cache.start_scan(_music_folder)
+
+            w = Worker(_bg_load_cache, _music_folder)
+            w.signals.result.connect(_on_cache_loaded)
+            ThreadPoolSingleton.get_instance().start(w)
 
         # Restore last device path — only if it still looks like a real
         # iPod (not a leftover project test-data folder, etc.).
@@ -1239,20 +1248,28 @@ class MainWindow(QMainWindow):
                     pass  # resolve() can fail on vanished drives; fall through
 
                 if device_manager is not None:
-                    # Run a quick scan so discovered_ipod is populated
-                    # (needed for FireWire GUID, model info, etc.)
-                    try:
+                    # Show device in sidebar immediately, scan for model
+                    # info in background (WMI/IOCTL can take 10+ seconds)
+                    _last_path = settings.last_device_path
+                    device_manager.device_path = _last_path
+                    self.sidebar.updateDeviceButton(
+                        os.path.basename(_last_path) or _last_path
+                    )
+
+                    def _bg_device_scan(path):
                         from GUI.device_scanner import scan_for_ipods
                         for ipod in scan_for_ipods():
-                            if os.path.normpath(ipod.path) == os.path.normpath(settings.last_device_path):
-                                device_manager.discovered_ipod = ipod
-                                break
-                    except Exception as e:
-                        logger.warning("Auto-restore scan failed: %s", e)
-                    device_manager.device_path = settings.last_device_path
-                    self.sidebar.updateDeviceButton(
-                        os.path.basename(settings.last_device_path) or settings.last_device_path
-                    )
+                            if os.path.normpath(ipod.path) == os.path.normpath(path):
+                                return ipod
+                        return None
+
+                    def _on_device_found(ipod):
+                        if ipod:
+                            device_manager.discovered_ipod = ipod
+
+                    dw = Worker(_bg_device_scan, _last_path)
+                    dw.signals.result.connect(_on_device_found)
+                    ThreadPoolSingleton.get_instance().start(dw)
 
     def selectDevice(self):
         """Open device picker dialog to scan and select an iPod."""
