@@ -148,11 +148,13 @@ class MusicBrowserGrid(QFrame):
 
         # Expand for the new item
         self._expanded_item_index = clicked_index
-        self._layout_with_expander()
+        self._layout_with_expander(scroll=False)
         self._populate_expander(item_data)
+        # Scroll after expander content is populated and has its final size
+        QTimer.singleShot(100, self._scroll_to_expander)
         self.item_selected.emit(item_data)
 
-    def _layout_with_expander(self):
+    def _layout_with_expander(self, scroll: bool = True):
         """Re-layout all grid items, inserting the expander after the clicked item's row."""
         if self._expanded_item_index < 0:
             return
@@ -180,8 +182,8 @@ class MusicBrowserGrid(QFrame):
             self._expander, expander_row, 0, 1, self.columnCount)
         self._expander.show()
 
-        # Scroll to make the expander visible
-        QTimer.singleShot(50, self._scroll_to_expander)
+        if scroll:
+            QTimer.singleShot(100, self._scroll_to_expander)
 
     def _scroll_to_expander(self):
         """Scroll so the clicked album card (and expander below it) is visible."""
