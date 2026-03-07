@@ -422,6 +422,8 @@ class PCLibraryCache(QObject):
             if not tracks:
                 continue
 
+            album = album or "Unknown Album"
+            artist = artist or "Unknown Artist"
             mhiiLink = tracks[0].get("mhiiLink")
             pc_art_hash = tracks[0].get("_pc_art_hash")
             track_count = len(tracks)
