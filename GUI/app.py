@@ -994,7 +994,7 @@ def build_album_list(cache) -> list:
             "total_length_ms": total_length_ms
         })
 
-    return sorted(items, key=lambda x: x["title"].lower())
+    return sorted(items, key=lambda x: (x.get("title") or "").lower())
 
 
 def build_artist_list(cache) -> list:
@@ -1042,7 +1042,7 @@ def build_artist_list(cache) -> list:
             "total_plays": total_plays
         })
 
-    return sorted(items, key=lambda x: x["title"].lower())
+    return sorted(items, key=lambda x: (x.get("title") or "").lower())
 
 
 def build_genre_list(cache) -> list:
@@ -1090,7 +1090,7 @@ def build_genre_list(cache) -> list:
             "total_length_ms": total_length_ms
         })
 
-    return sorted(items, key=lambda x: x["title"].lower())
+    return sorted(items, key=lambda x: (x.get("title") or "").lower())
 
 
 class MainWindow(QMainWindow):

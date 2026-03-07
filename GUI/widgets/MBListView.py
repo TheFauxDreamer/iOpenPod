@@ -608,6 +608,10 @@ class MusicBrowserList(QFrame):
         self._setup_columns()
         self._populate_table()
 
+    def resetDominantColor(self) -> None:
+        """Reset any album-specific dominant color styling (no-op for now)."""
+        pass
+
     def clearFilter(self) -> None:
         """Clear the current filter without reloading data."""
         self._current_filter = None

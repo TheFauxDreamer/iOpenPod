@@ -125,10 +125,10 @@ class AlbumExpanderPanel(QFrame):
         artist = item_data.get("artist", "")
         year = item_data.get("year")
         self._title_label.setText(title)
-        sub_parts = [artist]
+        sub_parts = [artist or ""]
         if year and year > 0:
             sub_parts.append(str(year))
-        self._subtitle_label.setText(" · ".join(sub_parts))
+        self._subtitle_label.setText(" · ".join(p for p in sub_parts if p))
 
         # Artwork
         if artwork and not artwork.isNull():
