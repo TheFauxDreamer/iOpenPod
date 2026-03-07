@@ -125,12 +125,26 @@ class ComboRow(SettingRow):
         self.combo = QComboBox()
         self.combo.setFixedWidth(130)
         self.combo.setFont(QFont(FONT_FAMILY, 10))
+        self._rebuild_combo_style()
+        if options:
+            self.combo.addItems(options)
+        if current:
+            idx = self.combo.findText(current)
+            if idx >= 0:
+                self.combo.setCurrentIndex(idx)
+        self.combo.currentTextChanged.connect(self.changed.emit)
+        self.add_control(self.combo)
+
+        from ..theme import ThemeManager
+        ThemeManager.instance().theme_changed.connect(self._rebuild_combo_style)
+
+    def _rebuild_combo_style(self):
         self.combo.setStyleSheet(f"""
             QComboBox {{
                 background: {Colors.SURFACE_RAISED};
                 border: 1px solid {Colors.BORDER};
                 border-radius: {Metrics.BORDER_RADIUS_SM}px;
-                color: white;
+                color: {Colors.TEXT_PRIMARY};
                 padding: 5px 10px;
             }}
             QComboBox:hover {{
@@ -145,8 +159,8 @@ class ComboRow(SettingRow):
                 border: none;
             }}
             QComboBox QAbstractItemView {{
-                background: #2a2a3a;
-                color: white;
+                background: {Colors.SURFACE_RAISED};
+                color: {Colors.TEXT_PRIMARY};
                 selection-background-color: {Colors.ACCENT};
                 border: 1px solid {Colors.BORDER};
                 border-radius: 4px;
@@ -154,14 +168,6 @@ class ComboRow(SettingRow):
                 outline: none;
             }}
         """)
-        if options:
-            self.combo.addItems(options)
-        if current:
-            idx = self.combo.findText(current)
-            if idx >= 0:
-                self.combo.setCurrentIndex(idx)
-        self.combo.currentTextChanged.connect(self.changed.emit)
-        self.add_control(self.combo)
 
     @property
     def value(self) -> str:
