@@ -332,6 +332,8 @@ class PCLibraryCache(QObject):
         self._album_items: list[dict] | None = None
         self._artist_items: list[dict] | None = None
         self._genre_items: list[dict] | None = None
+        # Track whether the last scan found changes (avoids unnecessary rebuilds)
+        self._scan_had_changes: bool = False
 
     # ── Public API ─────────────────────────────────────────────
 
@@ -568,7 +570,10 @@ class PCLibraryCache(QObject):
             self._artist_index.clear()
             self._genre_index.clear()
             self._index_tracks(tracks)
-            self._invalidate_item_lists()
+            # Pre-build item lists now so first grid load doesn't block
+            self._album_items = self._build_album_items()
+            self._artist_items = self._build_artist_items()
+            self._genre_items = self._build_genre_items()
             self._is_ready = True
 
         logger.info("Loaded %d tracks from disk cache (instant startup)", len(tracks))
@@ -592,8 +597,16 @@ class PCLibraryCache(QObject):
             self._is_loading = True
             self._music_folder = music_folder
 
-        # Check if we have cached entries to diff against
-        existing = self._load_disk_cache_entries(music_folder)
+        # Use already-loaded track data if available (avoids re-reading JSON)
+        existing: dict = {}
+        with self._lock:
+            if self._track_by_path:
+                for path, track in self._track_by_path.items():
+                    mtime = track.get("_pc_mtime", 0)
+                    existing[path] = (mtime, track)
+
+        if not existing:
+            existing = self._load_disk_cache_entries(music_folder)
 
         if existing:
             # Diff-based scan — only read metadata for new/modified files
@@ -676,6 +689,7 @@ class PCLibraryCache(QObject):
 
     def _on_full_scan_complete(self, tracks: list[dict]):
         """Called when full background scan finishes successfully."""
+        self._scan_had_changes = True  # Full scan always produces new data
         with self._lock:
             self._is_loading = False
             self._worker = None
@@ -692,9 +706,14 @@ class PCLibraryCache(QObject):
         self.scan_finished.emit()
         self.data_ready.emit()
 
+    def scan_had_changes(self) -> bool:
+        """Return True if the last completed scan found any changes."""
+        return self._scan_had_changes
+
     def _on_incremental_update(self, added_tracks: list[dict], removed_paths: list[str]):
         """Called when diff scan finds changes."""
         has_changes = bool(added_tracks) or bool(removed_paths)
+        self._scan_had_changes = has_changes
 
         with self._lock:
             if removed_paths:

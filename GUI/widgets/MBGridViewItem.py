@@ -155,40 +155,66 @@ class MusicBrowserGridItem(QFrame):
             self.worker = None
 
     def _loadPCArtwork(self, art_hash: str):
-        """Load artwork from PC library art cache (thumbnail on disk)."""
-        from ..pc_library_cache import get_pc_artwork
-        pixmap = get_pc_artwork(art_hash)
-        if pixmap and not pixmap.isNull():
-            pixmap = pixmap.scaled(
-                Metrics.GRID_ART_SIZE, Metrics.GRID_ART_SIZE,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
+        """Load PC artwork asynchronously — file I/O, scaling, and color
+        computation all happen in a background thread."""
+        from ..app import Worker, ThreadPoolSingleton
+
+        art_size = Metrics.GRID_ART_SIZE
+
+        def _load_and_compute(hash_val):
+            import os
+            from ..pc_library_cache import _art_cache_dir
+            thumb_path = os.path.join(_art_cache_dir(), f"{hash_val}.jpg")
+            if not os.path.exists(thumb_path):
+                return None
+            # Read image bytes in worker thread
+            with open(thumb_path, "rb") as f:
+                img_bytes = f.read()
+            if not img_bytes:
+                return None
+            # Decode and compute colors in worker thread
+            from PIL import Image
+            import io
+            pil_image = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+            pil_image.thumbnail((art_size, art_size), Image.Resampling.LANCZOS)
+            from ..imgMaker import getDominantColor, getAlbumColors
+            dcol = getDominantColor(pil_image)
+            album_colors = getAlbumColors(pil_image)
+            # Convert to raw RGBA bytes for QImage construction on main thread
+            raw = pil_image.tobytes("raw", "RGBA")
+            return {
+                "raw": raw,
+                "width": pil_image.width,
+                "height": pil_image.height,
+                "dcol": dcol,
+                "album_colors": album_colors,
+            }
+
+        worker = Worker(_load_and_compute, art_hash)
+        worker.signals.result.connect(self._applyPCArtworkAndColors)
+        ThreadPoolSingleton.get_instance().start(worker)
+
+    def _applyPCArtworkAndColors(self, result):
+        """Apply loaded artwork + colors on main thread."""
+        if self._destroyed or result is None:
+            self._setPlaceholderImage()
+            return
+        try:
+            # Build QPixmap from raw bytes
+            qimage = QImage(
+                result["raw"], result["width"], result["height"],
+                QImage.Format.Format_RGBA8888,
+            ).copy()  # .copy() owns the data
+            pixmap = QPixmap.fromImage(qimage)
             self.img_label.setPixmap(pixmap)
             self.img_label.setStyleSheet(f"""
                 border: none;
                 background: transparent;
                 border-radius: {Metrics.BORDER_RADIUS}px;
             """)
-            # Compute dominant color for tinting and expander
-            self._computePCColors(pixmap)
-        else:
-            self._setPlaceholderImage()
-
-    def _computePCColors(self, pixmap: QPixmap):
-        """Compute dominant color and album colors from a PC artwork pixmap."""
-        try:
-            from ..imgMaker import getDominantColor, getAlbumColors
-            # Convert QPixmap to PIL Image for color analysis
-            qimage = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
-            width, height = qimage.width(), qimage.height()
-            ptr = qimage.bits()
-            ptr.setsize(width * height * 4)
-            from PIL import Image
-            pil_image = Image.frombytes("RGBA", (width, height), bytes(ptr))
-            dcol = getDominantColor(pil_image)
-            album_colors = getAlbumColors(pil_image)
-
+            # Apply color tinting
+            dcol = result.get("dcol")
+            album_colors = result.get("album_colors")
             if dcol:
                 self.item_data["dominant_color"] = dcol
                 r, g, b = dcol
@@ -207,7 +233,8 @@ class MusicBrowserGridItem(QFrame):
             if album_colors:
                 self.item_data["album_colors"] = album_colors
         except Exception as e:
-            log.debug("PC color computation failed: %s", e)
+            log.debug("PC artwork apply failed: %s", e)
+            self._setPlaceholderImage()
 
     def loadImage(self):
         from ..app import Worker, ThreadPoolSingleton, DeviceManager

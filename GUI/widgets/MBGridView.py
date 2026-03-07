@@ -39,6 +39,10 @@ class MusicBrowserGrid(QFrame):
         self.columnCount = 1
         self._current_category = "Albums"
         self._load_id = 0
+        self._pending_items = None
+        self._pending_index = 0
+        self._pending_load_id = 0
+        self._pending_category: str | None = None  # Category being built (for widget cache)
 
         # Expansion state
         self._expander = AlbumExpanderPanel(self)
@@ -109,12 +113,14 @@ class MusicBrowserGrid(QFrame):
         else:
             return
 
+        self._pending_category = category
         self.populateGrid(items)
-        # Store in widget cache
-        self._widget_cache[category] = list(self.gridItems)
+
+    # Number of widgets to create per batch before yielding to event loop
+    _BATCH_SIZE = 40
 
     def populateGrid(self, items):
-        """Populate the grid with items."""
+        """Populate the grid with items in batches to keep the UI responsive."""
         log.debug(f"populateGrid() called with {len(items)} items")
         self._detach_widgets()
         self.gridItems = []
@@ -125,9 +131,27 @@ class MusicBrowserGrid(QFrame):
         self.columnCount = max(1, self._get_available_width() // _CELL_W)
         self._update_margins()
 
-        # Add all items in one pass — widget construction is cheap;
-        # image loading is already async via workers.
-        for i, item in enumerate(items):
+        if not items:
+            return
+
+        # Store items for batched creation
+        self._pending_items = list(items)
+        self._pending_index = 0
+        self._pending_load_id = current_load_id
+        self._processBatch()
+
+    def _processBatch(self):
+        """Create the next batch of grid item widgets."""
+        if self._load_id != self._pending_load_id:
+            # A newer load has started — abort this one
+            return
+
+        items = self._pending_items
+        start = self._pending_index
+        end = min(start + self._BATCH_SIZE, len(items))
+
+        for i in range(start, end):
+            item = items[i]
             row = i // self.columnCount
             col = i % self.columnCount
 
@@ -161,6 +185,19 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
+
+        self._pending_index = end
+
+        if end < len(items):
+            # Schedule next batch — yields to event loop so UI stays responsive
+            QTimer.singleShot(0, self._processBatch)
+        else:
+            # All done — store in widget cache and clean up
+            if self._pending_category:
+                self._widget_cache[self._pending_category] = list(self.gridItems)
+                self._pending_category = None
+            self._pending_items = None
+            log.debug(f"populateGrid() finished: {len(self.gridItems)} widgets created")
 
     def _detach_widgets(self):
         """Remove all grid items from layout without destroying them."""
