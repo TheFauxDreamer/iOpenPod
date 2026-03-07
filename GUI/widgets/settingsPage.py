@@ -571,6 +571,22 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.show_art)
 
+        self.theme_mode = ComboRow(
+            "Theme",
+            "Choose between dark and light appearance, or follow your system setting.",
+            options=["Dark", "Light", "System"],
+            current="Dark",
+        )
+        layout.addWidget(self.theme_mode)
+
+        self.accent_color = ComboRow(
+            "Accent Colour",
+            "Primary highlight colour used throughout the interface.",
+            options=["Blue", "Red", "Green", "Orange", "Purple", "Cyan", "Pink"],
+            current="Blue",
+        )
+        layout.addWidget(self.accent_color)
+
         # ── STORAGE section ─────────────────────────────────────────────────
         layout.addWidget(self._section_label("STORAGE"))
 
@@ -668,6 +684,20 @@ class SettingsPage(QWidget):
             self.rating_strategy.combo.setCurrentIndex(idx)
 
         self.show_art.value = s.show_art_in_tracklist
+
+        # Theme mode
+        mode_display = {"dark": "Dark", "light": "Light", "system": "System"}
+        tm_text = mode_display.get(s.theme_mode, "Dark")
+        idx = self.theme_mode.combo.findText(tm_text)
+        if idx >= 0:
+            self.theme_mode.combo.setCurrentIndex(idx)
+
+        # Accent color
+        ac_text = (s.accent_color or "blue").capitalize()
+        idx = self.accent_color.combo.findText(ac_text)
+        if idx >= 0:
+            self.accent_color.combo.setCurrentIndex(idx)
+
         self.transcode_cache_dir.value = s.transcode_cache_dir
         self.settings_dir.value = s.settings_dir
         self.log_dir.value = s.log_dir
@@ -725,6 +755,8 @@ class SettingsPage(QWidget):
             self.video_preset.changed.connect(self._save)
             self.sync_workers.changed.connect(self._save)
             self.show_art.changed.connect(self._save)
+            self.theme_mode.changed.connect(self._save)
+            self.accent_color.changed.connect(self._save)
             self.transcode_cache_dir.changed.connect(self._save)
             self.settings_dir.changed.connect(self._save)
             self.log_dir.changed.connect(self._save)
@@ -751,6 +783,19 @@ class SettingsPage(QWidget):
         s.rating_conflict_strategy = strategy_keys.get(self.rating_strategy.value, "ipod_wins")
 
         s.show_art_in_tracklist = self.show_art.value
+
+        # Theme mode
+        mode_keys = {"Dark": "dark", "Light": "light", "System": "system"}
+        s.theme_mode = mode_keys.get(self.theme_mode.value, "dark")
+
+        # Accent color
+        s.accent_color = (self.accent_color.value or "Blue").lower()
+
+        # Apply theme changes immediately
+        from ..theme import ThemeManager
+        ThemeManager.instance().set_mode(s.theme_mode)
+        ThemeManager.instance().set_accent(s.accent_color)
+
         s.transcode_cache_dir = self.transcode_cache_dir.value
         s.settings_dir = self.settings_dir.value
         s.log_dir = self.log_dir.value
