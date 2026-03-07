@@ -1285,6 +1285,9 @@ class MainWindow(QMainWindow):
     def _onPCScanFinished(self):
         """Called when PC library scan fully completes."""
         self._hideScanProgress()
+        # Force a final grid rebuild now that all data is available
+        if self.musicBrowser.dataSource() == "library":
+            self.musicBrowser.onDataReady(force=True)
 
     def _onPCScanProgress(self, current: int, total: int):
         """Update the scan progress dialog."""

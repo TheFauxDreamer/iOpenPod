@@ -134,7 +134,7 @@ class _ScanWorkerSignals(QObject):
     progress = pyqtSignal(int, int)  # current, total
 
 # How many tracks to accumulate before emitting a partial result batch
-_PARTIAL_BATCH_SIZE = 500
+_PARTIAL_BATCH_SIZE = 2000
 
 
 class _ScanWorker(QRunnable):
@@ -356,8 +356,14 @@ class PCLibraryCache(QObject):
             self._is_loading = False
             self._worker = None
 
-        # Save to disk cache for next launch
-        self._save_disk_cache(self._music_folder, tracks)
+        # Save to disk cache in a background thread to avoid blocking the UI
+        import threading
+        music_folder = self._music_folder
+        threading.Thread(
+            target=self._save_disk_cache,
+            args=(music_folder, tracks),
+            daemon=True,
+        ).start()
 
         self.scan_finished.emit()
         self.data_ready.emit()

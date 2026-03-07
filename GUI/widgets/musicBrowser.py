@@ -7,7 +7,7 @@ Supports two data sources (switched via setDataSource):
 """
 
 import logging
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtWidgets import (
     QScrollArea, QFrame, QVBoxLayout, QSizePolicy, QStackedWidget, QLabel,
 )
@@ -81,6 +81,12 @@ class MusicBrowser(QFrame):
         self._emptyState = self._build_empty_state()
         self.stack.addWidget(self._emptyState)  # index 3
 
+        # Debounce timer for data_ready signals during scanning
+        self._data_ready_timer = QTimer(self)
+        self._data_ready_timer.setSingleShot(True)
+        self._data_ready_timer.setInterval(500)  # Coalesce updates within 500ms
+        self._data_ready_timer.timeout.connect(self._refreshCurrentCategory)
+
         # Connect to theme changes
         from ..theme import ThemeManager
         ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
@@ -107,9 +113,22 @@ class MusicBrowser(QFrame):
         self.browserTrack.clearTable()
         self.playlistBrowser.clear()
 
-    def onDataReady(self):
-        """Called when the active cache finishes loading."""
-        self._refreshCurrentCategory()
+    def onDataReady(self, force: bool = False):
+        """Called when the active cache has new data (may fire many times during scan).
+
+        During an active scan, only updates the progress message. The full
+        grid rebuild happens once when the scan finishes (force=True) or
+        when the debounce timer expires after scan completion.
+        """
+        cache = self._get_cache()
+        if cache and cache.is_loading() and not force:
+            # Scan still in progress — show progress count, don't rebuild grid
+            track_count = len(cache.get_tracks()) if hasattr(cache, 'get_tracks') else 0
+            if track_count > 0:
+                self._show_empty(f"Scanning your music library... ({track_count:,} tracks found)")
+            return
+        # Scan finished or force — debounce the grid rebuild
+        self._data_ready_timer.start()
 
     def updateCategory(self, category: str):
         """Programmatically switch category (used by sidebar in old flow)."""
