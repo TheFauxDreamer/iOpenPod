@@ -188,12 +188,14 @@ def getDominantColor(image):
 
     w, h = small_rgb.size
 
-    # Sample the left ~20% of the image (iTunes 11 approach)
-    left_strip_w = max(2, w // 5)
-    left_strip = small_rgb.crop((0, 0, left_strip_w, h))
+    # Sample the right ~20% of the image — the artwork sits on the
+    # left of the expander panel, so the right edge is what's visible
+    # behind the track listing and gradient.
+    strip_w = max(2, w // 5)
+    edge_strip = small_rgb.crop((w - strip_w, 0, w, h))
 
-    # Extract palette from left strip
-    quantized = left_strip.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
+    # Extract palette from edge strip
+    quantized = edge_strip.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
     palette_data = quantized.getpalette()[:24]
 
     best_color = None
@@ -238,9 +240,13 @@ def getDominantColor(image):
                 best_color = (fr, fg, fb)
                 r, g, b = fr, fg, fb
 
-    # Moderate boost to saturation and brightness for visual appeal
+    # Moderate boost to saturation and brightness for visual appeal.
+    # Only boost saturation for colors that already have meaningful
+    # saturation — otherwise a gray/black/white pixel gets an arbitrary
+    # hue injected (e.g. pink tint on a B&W album cover).
     h_val, s_val, v_val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-    s_val = min(1.0, s_val * 1.4 + 0.1)
+    if s_val > 0.08:
+        s_val = min(1.0, s_val * 1.4 + 0.1)
     v_val = max(0.35, min(0.85, v_val * 1.2 + 0.05))
     r, g, b = colorsys.hsv_to_rgb(h_val, s_val, v_val)
     return (int(r * 255), int(g * 255), int(b * 255))
