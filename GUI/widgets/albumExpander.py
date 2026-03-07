@@ -151,7 +151,7 @@ class AlbumExpanderPanel(QFrame):
                 background: {Colors.SURFACE_HOVER};
                 border-radius: {Metrics.BORDER_RADIUS}px;
                 border: none;
-                color: {self._text_secondary_color};
+                color: {self._css_color(self._text_secondary_color)};
             """)
 
         # Build track rows
@@ -208,7 +208,7 @@ class AlbumExpanderPanel(QFrame):
             background: {Colors.SURFACE_HOVER};
             border-radius: {Metrics.BORDER_RADIUS}px;
             border: none;
-            color: {self._text_secondary_color};
+            color: {self._css_color(self._text_secondary_color)};
         """)
 
         self._clear_track_list()
@@ -224,7 +224,7 @@ class AlbumExpanderPanel(QFrame):
             )
             album_header.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
             album_header.setStyleSheet(f"""
-                color: {self._text_color};
+                color: {self._css_color(self._text_color)};
                 padding: 8px 0 2px 0;
                 background: transparent;
             """)
@@ -249,10 +249,19 @@ class AlbumExpanderPanel(QFrame):
 
     # ── Internal ───────────────────────────────────────────────
 
+    @staticmethod
+    def _css_color(val) -> str:
+        """Convert an RGB tuple or CSS string to a CSS color value."""
+        if isinstance(val, (tuple, list)) and len(val) >= 3:
+            return f"rgb({val[0]},{val[1]},{val[2]})"
+        return str(val)
+
     def _apply_colors(self):
         r, g, b = self._bg_color
         # Slightly darker shade for gradient
         dr, dg, db = max(0, r - 30), max(0, g - 30), max(0, b - 30)
+        text_css = self._css_color(self._text_color)
+        text_sec_css = self._css_color(self._text_secondary_color)
         self.setStyleSheet(f"""
             AlbumExpanderPanel {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -262,11 +271,11 @@ class AlbumExpanderPanel(QFrame):
             }}
         """)
         self._title_label.setStyleSheet(
-            f"color: {self._text_color}; background: transparent;")
+            f"color: {text_css}; background: transparent;")
         self._subtitle_label.setStyleSheet(
-            f"color: {self._text_secondary_color}; background: transparent;")
+            f"color: {text_sec_css}; background: transparent;")
         self._close_btn.setStyleSheet(f"""
-            color: {self._text_secondary_color};
+            color: {text_sec_css};
             background: transparent;
             border: none;
             border-radius: 14px;
@@ -302,14 +311,14 @@ class AlbumExpanderPanel(QFrame):
         num_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         num_label.setFont(QFont(FONT_FAMILY, 10))
         num_label.setStyleSheet(
-            f"color: {self._text_secondary_color}; background: transparent; border: none;")
+            f"color: {self._css_color(self._text_secondary_color)}; background: transparent; border: none;")
         layout.addWidget(num_label)
 
         # Title
         title_label = QLabel(track.get("Title", ""))
         title_label.setFont(QFont(FONT_FAMILY, 10))
         title_label.setStyleSheet(
-            f"color: {self._text_color}; background: transparent; border: none;")
+            f"color: {self._css_color(self._text_color)}; background: transparent; border: none;")
         layout.addWidget(title_label, 1)
 
         # Format tag (only shown for mixed-format albums)
@@ -321,7 +330,7 @@ class AlbumExpanderPanel(QFrame):
                 fmt_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
                 fmt_label.setFont(QFont(FONT_FAMILY, 8))
                 fmt_label.setStyleSheet(
-                    f"color: {self._text_secondary_color}; background: rgba(255,255,255,8);"
+                    f"color: {self._css_color(self._text_secondary_color)}; background: rgba(255,255,255,8);"
                     f" border: none; border-radius: 3px; padding: 1px 4px;")
                 layout.addWidget(fmt_label)
 
@@ -332,7 +341,7 @@ class AlbumExpanderPanel(QFrame):
         dur_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         dur_label.setFont(QFont(FONT_FAMILY, 10))
         dur_label.setStyleSheet(
-            f"color: {self._text_secondary_color}; background: transparent; border: none;")
+            f"color: {self._css_color(self._text_secondary_color)}; background: transparent; border: none;")
         layout.addWidget(dur_label)
 
         return row

@@ -249,8 +249,15 @@ class MusicBrowserGrid(QFrame):
         # Get artwork and colors from the grid item
         dominant_color = item_data.get("dominant_color", (60, 60, 60))
         album_colors = item_data.get("album_colors", {})
-        text = album_colors.get("text", "rgba(255,255,255,230)")
-        text_sec = album_colors.get("text_secondary", "rgba(255,255,255,150)")
+        raw_text = album_colors.get("text")
+        raw_sec = album_colors.get("text_secondary")
+        # Convert RGB tuples to CSS strings; fall back to white on dark
+        text = (f"rgb({raw_text[0]},{raw_text[1]},{raw_text[2]})"
+                if isinstance(raw_text, (tuple, list)) else
+                raw_text or "rgba(255,255,255,230)")
+        text_sec = (f"rgb({raw_sec[0]},{raw_sec[1]},{raw_sec[2]})"
+                    if isinstance(raw_sec, (tuple, list)) else
+                    raw_sec or "rgba(255,255,255,150)")
 
         # Get the pixmap from the grid item's label if available
         artwork = None
