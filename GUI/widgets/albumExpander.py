@@ -176,14 +176,24 @@ class AlbumExpanderPanel(QFrame):
         disc_numbers = set(t.get("discNumber", 0) for t in sorted_tracks)
         multi_disc = len(disc_numbers) > 1 and disc_numbers != {0}
 
-        # Build flat list of widgets (disc headers + track rows)
-        widgets: list[tuple[QWidget, bool]] = []  # (widget, is_header)
-        current_disc = None
-        for track in sorted_tracks:
-            disc = track.get("discNumber", 0)
-            if multi_disc and disc != current_disc:
-                current_disc = disc
-                disc_label = QLabel(f"Disc {disc}" if disc else "Disc ?")
+        # Group tracks by disc
+        if multi_disc:
+            disc_groups: list[tuple[int, list[dict]]] = []
+            current_disc = None
+            for track in sorted_tracks:
+                disc = track.get("discNumber", 0)
+                if disc != current_disc:
+                    current_disc = disc
+                    disc_groups.append((disc, []))
+                disc_groups[-1][1].append(track)
+        else:
+            disc_groups = [(0, list(sorted_tracks))]
+
+        grid_row = 0
+        total_col_rows = 0
+        for disc_num, disc_tracks in disc_groups:
+            if multi_disc:
+                disc_label = QLabel(f"Disc {disc_num}" if disc_num else "Disc ?")
                 disc_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.DemiBold))
                 disc_label.setStyleSheet(f"""
                     color: {self._css_color(self._text_secondary_color)};
@@ -191,16 +201,23 @@ class AlbumExpanderPanel(QFrame):
                     background: transparent;
                     border: none;
                 """)
-                widgets.append((disc_label, True))
-            row = self._make_track_row(track, show_format=show_format)
-            widgets.append((row, False))
+                self._track_grid.addWidget(disc_label, grid_row, 0, 1, 2)
+                grid_row += 1
 
-        self._layout_two_columns(widgets)
+            track_widgets = [self._make_track_row(t, show_format=show_format)
+                             for t in disc_tracks]
+            mid = (len(track_widgets) + 1) // 2
+            col_rows = max(mid, len(track_widgets) - mid)
+            for j, tw in enumerate(track_widgets):
+                if j < mid:
+                    self._track_grid.addWidget(tw, grid_row + j, 0)
+                else:
+                    self._track_grid.addWidget(tw, grid_row + (j - mid), 1)
+            grid_row += col_rows
+            total_col_rows += col_rows
 
-        # Adjust height: half the tracks per column
-        col_tracks = (len(sorted_tracks) + 1) // 2
-        disc_header_count = sum(1 for _, h in widgets if h)
-        track_height = col_tracks * _TRACK_ROW_H + disc_header_count * 30 + 60
+        disc_header_count = len(disc_groups) if multi_disc else 0
+        track_height = total_col_rows * _TRACK_ROW_H + disc_header_count * 30 + 60
         self.setMinimumHeight(max(_PANEL_MIN_H, _ART_SIZE + 32, track_height))
 
         self.show()
@@ -242,10 +259,10 @@ class AlbumExpanderPanel(QFrame):
 
         self._clear_track_list()
 
-        widgets: list[tuple[QWidget, bool]] = []  # (widget, is_header)
-        total_tracks = 0
+        grid_row = 0
+        total_col_rows = 0
         for album_data, tracks in albums_with_tracks:
-            # Album sub-header with optional format tag
+            # Album sub-header spanning both columns
             album_title = album_data.get('title', 'Unknown Album')
             album_year = album_data.get('year')
             album_fmt = get_album_format_tag(tracks) if tracks else ""
@@ -261,22 +278,29 @@ class AlbumExpanderPanel(QFrame):
                 padding: 8px 0 2px 0;
                 background: transparent;
             """)
-            widgets.append((album_header, True))
+            self._track_grid.addWidget(album_header, grid_row, 0, 1, 2)
+            grid_row += 1
 
             sorted_tracks = sorted(
                 tracks,
                 key=lambda t: (t.get("discNumber", 0), t.get("trackNumber", 0)),
             )
             show_format = not get_album_format_tag(sorted_tracks)
-            for track in sorted_tracks:
-                row = self._make_track_row(track, show_format=show_format)
-                widgets.append((row, False))
-            total_tracks += len(sorted_tracks)
+            track_widgets = [self._make_track_row(t, show_format=show_format)
+                             for t in sorted_tracks]
 
-        self._layout_two_columns(widgets)
+            # Two-column layout for this album's tracks
+            mid = (len(track_widgets) + 1) // 2
+            col_rows = max(mid, len(track_widgets) - mid)
+            for j, tw in enumerate(track_widgets):
+                if j < mid:
+                    self._track_grid.addWidget(tw, grid_row + j, 0)
+                else:
+                    self._track_grid.addWidget(tw, grid_row + (j - mid), 1)
+            grid_row += col_rows
+            total_col_rows += col_rows
 
-        col_tracks = (total_tracks + 1) // 2
-        track_height = col_tracks * _TRACK_ROW_H + len(albums_with_tracks) * 36 + 60
+        track_height = total_col_rows * _TRACK_ROW_H + len(albums_with_tracks) * 36 + 60
         self.setMinimumHeight(max(_PANEL_MIN_H, track_height))
         self.show()
 
@@ -381,44 +405,6 @@ class AlbumExpanderPanel(QFrame):
         layout.addWidget(dur_label)
 
         return row
-
-    def _layout_two_columns(self, widgets: list[tuple[QWidget, bool]]):
-        """Distribute widgets across two columns in the track grid.
-
-        Headers (is_header=True) span both columns. Track rows fill
-        top-to-bottom in the left column first, then the right column.
-        """
-        if not widgets:
-            return
-
-        # Split into left and right column items, keeping headers spanning
-        # Strategy: find the midpoint of track rows, put first half left, second right
-        track_indices = [i for i, (_, h) in enumerate(widgets) if not h]
-        mid = (len(track_indices) + 1) // 2  # ceil division
-
-        # Build column assignments: 0 = left, 1 = right
-        if track_indices:
-            mid_widget_idx = track_indices[mid] if mid < len(track_indices) else len(widgets)
-        else:
-            mid_widget_idx = len(widgets)
-
-        left_row = 0
-        right_row = 0
-        for i, (widget, is_header) in enumerate(widgets):
-            if is_header:
-                if i < mid_widget_idx:
-                    self._track_grid.addWidget(widget, left_row, 0)
-                    left_row += 1
-                else:
-                    self._track_grid.addWidget(widget, right_row, 1)
-                    right_row += 1
-            else:
-                if i < mid_widget_idx:
-                    self._track_grid.addWidget(widget, left_row, 0)
-                    left_row += 1
-                else:
-                    self._track_grid.addWidget(widget, right_row, 1)
-                    right_row += 1
 
     def _clear_track_list(self):
         """Remove all track rows from the grid."""
