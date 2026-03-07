@@ -184,9 +184,15 @@ class MusicBrowserGrid(QFrame):
         QTimer.singleShot(50, self._scroll_to_expander)
 
     def _scroll_to_expander(self):
-        """Scroll the parent QScrollArea to make the expander visible."""
+        """Scroll so the clicked album card (and expander below it) is visible."""
         scroll = self.parent()
-        if scroll and hasattr(scroll, 'ensureWidgetVisible'):
+        if not scroll or not hasattr(scroll, 'ensureWidgetVisible'):
+            return
+        # Scroll to the clicked grid item so the card + expander are in view
+        if 0 <= self._expanded_item_index < len(self.gridItems):
+            scroll.ensureWidgetVisible(
+                self.gridItems[self._expanded_item_index], 0, 50)
+        else:
             scroll.ensureWidgetVisible(self._expander, 0, 50)
 
     def _populate_expander(self, item_data: dict):
