@@ -1203,11 +1203,18 @@ class MainWindow(QMainWindow):
         self.musicBrowser.browserGrid.track_play_requested.connect(
             self._onTrackPlayRequested)
 
-        # Default to Library view and start PC scan if music folder is set
+        # Default to Library view — load from disk cache first for instant startup
         self.musicBrowser.setDataSource("library")
-        if settings.music_folder and not self._pc_cache.is_ready() and not self._pc_cache.is_loading():
-            self._showScanProgress()
-            self._pc_cache.start_scan(settings.music_folder)
+        if settings.music_folder:
+            loaded = self._pc_cache.load_from_disk(settings.music_folder)
+            if loaded > 0:
+                # UI can display immediately from cached data
+                self.musicBrowser.onDataReady(force=True)
+            # Start background diff scan to detect changes
+            if not self._pc_cache.is_loading():
+                if loaded == 0:
+                    self._showScanProgress()
+                self._pc_cache.start_scan(settings.music_folder)
 
         # Restore last device path — only if it still looks like a real
         # iPod (not a leftover project test-data folder, etc.).

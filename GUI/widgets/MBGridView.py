@@ -16,6 +16,9 @@ class MusicBrowserGrid(QFrame):
 
     Supports iTunes 11 style inline expansion: clicking an item inserts
     an AlbumExpanderPanel below that row.
+
+    Caches widgets per category so tab switches are instant (no widget
+    destruction/recreation).
     """
     item_selected = pyqtSignal(dict)  # Emits when an item is clicked
     track_play_requested = pyqtSignal(dict, list)  # Relayed from expander
@@ -44,13 +47,14 @@ class MusicBrowserGrid(QFrame):
         self._expanded_item_index: int = -1  # Index in self.gridItems, -1 = collapsed
         self._cache = None  # Active cache reference for track lookups
 
+        # Widget cache: category -> list of grid item widgets (Phase 3)
+        self._widget_cache: dict[str, list[MusicBrowserGridItem]] = {}
+
     def loadCategory(self, category: str, cache=None):
         """Load and display items for the specified category."""
-        from ..app import build_album_list, build_artist_list, build_genre_list
         log.debug(f"loadCategory() called: {category}")
 
         self._current_category = category
-        self.clearGrid()
 
         if cache is None:
             from ..app import iTunesDBCache
@@ -59,23 +63,61 @@ class MusicBrowserGrid(QFrame):
         self._cache = cache
 
         if not cache.is_ready():
+            self.clearGrid()
             return
 
+        # Check if we have cached widgets for this category
+        if category in self._widget_cache:
+            cached_widgets = self._widget_cache[category]
+            if cached_widgets:
+                log.debug(f"Reusing {len(cached_widgets)} cached widgets for {category}")
+                self._detach_widgets()  # Remove current widgets from layout
+                self.gridItems = cached_widgets
+                self.columnCount = max(1, self._get_available_width() // _CELL_W)
+                self._update_margins()
+                for i, grid_item in enumerate(self.gridItems):
+                    row = i // self.columnCount
+                    col = i % self.columnCount
+                    self.gridLayout.addWidget(grid_item, row, col)
+                    grid_item.show()
+                return
+
+        # No cached widgets — build fresh
+        self._detach_widgets()
+        self.gridItems = []
+
+        # Use pre-computed item lists if available (PCLibraryCache),
+        # fall back to build_*_list() for iTunesDBCache
         if category == "Albums":
-            items = build_album_list(cache)
+            if hasattr(cache, 'get_album_items'):
+                items = cache.get_album_items()
+            else:
+                from ..app import build_album_list
+                items = build_album_list(cache)
         elif category == "Artists":
-            items = build_artist_list(cache)
+            if hasattr(cache, 'get_artist_items'):
+                items = cache.get_artist_items()
+            else:
+                from ..app import build_artist_list
+                items = build_artist_list(cache)
         elif category == "Genres":
-            items = build_genre_list(cache)
+            if hasattr(cache, 'get_genre_items'):
+                items = cache.get_genre_items()
+            else:
+                from ..app import build_genre_list
+                items = build_genre_list(cache)
         else:
             return
 
         self.populateGrid(items)
+        # Store in widget cache
+        self._widget_cache[category] = list(self.gridItems)
 
     def populateGrid(self, items):
         """Populate the grid with items."""
         log.debug(f"populateGrid() called with {len(items)} items")
-        self.clearGrid()
+        self._detach_widgets()
+        self.gridItems = []
 
         self._load_id += 1
         current_load_id = self._load_id
@@ -119,6 +161,32 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
+
+    def _detach_widgets(self):
+        """Remove all grid items from layout without destroying them."""
+        # Collapse expander
+        self._expanded_item_index = -1
+        self._expander.hide()
+        self.gridLayout.removeWidget(self._expander)
+
+        # Remove widgets from layout but keep them alive
+        while self.gridLayout.count():
+            item = self.gridLayout.takeAt(0)
+            if item and item.widget():
+                item.widget().hide()
+
+        # Reset row minimum heights
+        for r in range(self.gridLayout.rowCount()):
+            self.gridLayout.setRowMinimumHeight(r, 0)
+
+    def invalidateWidgetCache(self):
+        """Destroy all cached widgets (call when data changes)."""
+        log.debug("invalidateWidgetCache() — destroying all cached widgets")
+        for category, widgets in self._widget_cache.items():
+            for w in widgets:
+                w.cleanup()
+                w.deleteLater()
+        self._widget_cache.clear()
 
     def _onItemClicked(self, item_data: dict):
         """Handle grid item click — toggle inline expansion."""
@@ -331,7 +399,7 @@ class MusicBrowserGrid(QFrame):
                 self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
     def clearGrid(self):
-        """Clear all grid items to prepare for reloading."""
+        """Clear all grid items and destroy widgets."""
         log.debug(f"clearGrid() called, current items: {len(self.gridItems)}, load_id: {self._load_id}")
         self._load_id += 1
 
@@ -351,6 +419,8 @@ class MusicBrowserGrid(QFrame):
                     widget.deleteLater()
 
         self.gridItems = []
+        # Also invalidate widget cache since we're clearing
+        self._widget_cache.clear()
 
         # Reset row minimum heights from previous load
         for r in range(self.gridLayout.rowCount()):

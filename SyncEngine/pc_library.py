@@ -417,6 +417,24 @@ class PCLibrary:
         if not self.root_path.is_dir():
             raise ValueError(f"Library path is not a directory: {self.root_path}")
 
+    def stat_scan(self, include_video: bool = True) -> Iterator[tuple[str, float, str]]:
+        """Lightweight scan: yield (path, mtime, extension) using only os.walk + os.stat.
+
+        No mutagen, no metadata parsing — used for fast change detection.
+        """
+        extensions = MEDIA_EXTENSIONS if include_video else AUDIO_EXTENSIONS
+        for root, _, files in os.walk(self.root_path):
+            for filename in files:
+                ext = Path(filename).suffix.lower()
+                if ext not in extensions:
+                    continue
+                file_path = os.path.join(root, filename)
+                try:
+                    mtime = os.stat(file_path).st_mtime
+                    yield (file_path, mtime, ext)
+                except OSError:
+                    continue
+
     def count_audio_files(self, include_video: bool = True) -> int:
         """Count total media files in library (fast, no metadata reading).
 

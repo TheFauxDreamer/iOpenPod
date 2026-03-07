@@ -127,6 +127,8 @@ class MusicBrowser(QFrame):
             if track_count > 0:
                 self._show_empty(f"Scanning your music library... ({track_count:,} tracks found)")
             return
+        # Data changed — invalidate cached grid widgets so they rebuild
+        self.browserGrid.invalidateWidgetCache()
         # Scan finished or force — debounce the grid rebuild
         self._data_ready_timer.start()
 
