@@ -1,5 +1,4 @@
 import logging
-from collections import deque
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QGridLayout, QSizePolicy
 from .MBGridViewItem import MusicBrowserGridItem
@@ -34,8 +33,6 @@ class MusicBrowserGrid(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         self.gridItems: list[MusicBrowserGridItem] = []
-        self.pendingItems: deque = deque()
-        self.timerActive = False
         self.columnCount = 1
         self._current_category = "Albums"
         self._load_id = 0
@@ -86,34 +83,9 @@ class MusicBrowserGrid(QFrame):
         self.columnCount = max(1, self._get_available_width() // _CELL_W)
         self._update_margins()
 
-        self.pendingItems = deque(enumerate(items))
-
-        # Pre-set all row heights so the layout doesn't shift as batches load
-        total_rows = (len(items) + self.columnCount - 1) // self.columnCount
-        for r in range(total_rows):
-            self.gridLayout.setRowMinimumHeight(r, Metrics.GRID_ITEM_H)
-
-        if self.pendingItems and not self.timerActive:
-            self.timerActive = True
-            self._startAddingItems(current_load_id)
-
-    def _startAddingItems(self, load_id: int):
-        self._addNextItem(load_id)
-
-    def _addNextItem(self, load_id: int):
-        if load_id != self._load_id:
-            self.timerActive = False
-            return
-        if not self.pendingItems:
-            self.timerActive = False
-            return
-
-        batch_size = 5
-        for _ in range(batch_size):
-            if not self.pendingItems:
-                break
-
-            i, item = self.pendingItems.popleft()
+        # Add all items in one pass — widget construction is cheap;
+        # image loading is already async via workers.
+        for i, item in enumerate(items):
             row = i // self.columnCount
             col = i % self.columnCount
 
@@ -147,11 +119,6 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
-
-        if self.pendingItems and load_id == self._load_id:
-            QTimer.singleShot(8, lambda: self._addNextItem(load_id))
-        else:
-            self.timerActive = False
 
     def _onItemClicked(self, item_data: dict):
         """Handle grid item click — toggle inline expansion."""
@@ -358,8 +325,6 @@ class MusicBrowserGrid(QFrame):
     def clearGrid(self):
         """Clear all grid items to prepare for reloading."""
         log.debug(f"clearGrid() called, current items: {len(self.gridItems)}, load_id: {self._load_id}")
-        self.timerActive = False
-        self.pendingItems = deque()
         self._load_id += 1
 
         # Collapse expander
