@@ -169,12 +169,31 @@ class AlbumExpanderPanel(QFrame):
         # Show per-track format tags only when the album has mixed formats
         show_format = not get_album_format_tag(sorted_tracks)
 
+        # Check if this is a multi-disc album
+        disc_numbers = set(t.get("discNumber", 0) for t in sorted_tracks)
+        multi_disc = len(disc_numbers) > 1 and disc_numbers != {0}
+
+        disc_header_count = 0
+        current_disc = None
         for track in sorted_tracks:
+            disc = track.get("discNumber", 0)
+            if multi_disc and disc != current_disc:
+                current_disc = disc
+                disc_label = QLabel(f"Disc {disc}" if disc else "Disc ?")
+                disc_label.setFont(QFont(FONT_FAMILY, 9, QFont.Weight.DemiBold))
+                disc_label.setStyleSheet(f"""
+                    color: {self._css_color(self._text_secondary_color)};
+                    padding: 8px 0 2px 0;
+                    background: transparent;
+                    border: none;
+                """)
+                self._track_list.addWidget(disc_label)
+                disc_header_count += 1
             row = self._make_track_row(track, show_format=show_format)
             self._track_list.addWidget(row)
 
         # Adjust height based on content
-        track_height = len(sorted_tracks) * _TRACK_ROW_H + 60
+        track_height = len(sorted_tracks) * _TRACK_ROW_H + disc_header_count * 30 + 60
         self.setMinimumHeight(max(_PANEL_MIN_H, _ART_SIZE + 32, track_height))
 
         self.show()
