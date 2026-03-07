@@ -88,6 +88,11 @@ class MusicBrowserGrid(QFrame):
 
         self.pendingItems = deque(enumerate(items))
 
+        # Pre-set all row heights so the layout doesn't shift as batches load
+        total_rows = (len(items) + self.columnCount - 1) // self.columnCount
+        for r in range(total_rows):
+            self.gridLayout.setRowMinimumHeight(r, Metrics.GRID_ITEM_H)
+
         if self.pendingItems and not self.timerActive:
             self.timerActive = True
             self._startAddingItems(current_load_id)
@@ -142,8 +147,6 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
-            # Pre-set row height so later batches don't overlap
-            self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
         if self.pendingItems and load_id == self._load_id:
             QTimer.singleShot(8, lambda: self._addNextItem(load_id))
