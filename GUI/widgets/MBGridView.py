@@ -142,6 +142,8 @@ class MusicBrowserGrid(QFrame):
                 continue
 
             self.gridLayout.addWidget(gridItem, row, col)
+            # Pre-set row height so later batches don't overlap
+            self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
         if self.pendingItems and load_id == self._load_id:
             QTimer.singleShot(8, lambda: self._addNextItem(load_id))
@@ -348,6 +350,7 @@ class MusicBrowserGrid(QFrame):
                 row = i // self.columnCount
                 col = i % self.columnCount
                 self.gridLayout.addWidget(gridItem, row, col)
+                self.gridLayout.setRowMinimumHeight(row, Metrics.GRID_ITEM_H)
 
     def clearGrid(self):
         """Clear all grid items to prepare for reloading."""
@@ -372,6 +375,10 @@ class MusicBrowserGrid(QFrame):
                     widget.deleteLater()
 
         self.gridItems = []
+
+        # Reset row minimum heights from previous load
+        for r in range(self.gridLayout.rowCount()):
+            self.gridLayout.setRowMinimumHeight(r, 0)
 
     def resizeEvent(self, a0):
         newCols = max(1, self._get_available_width() // _CELL_W)

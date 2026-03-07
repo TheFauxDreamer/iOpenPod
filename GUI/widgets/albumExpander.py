@@ -124,10 +124,13 @@ class AlbumExpanderPanel(QFrame):
         title = item_data.get("title", "")
         artist = item_data.get("artist", "")
         year = item_data.get("year")
+        album_fmt = get_album_format_tag(tracks) if tracks else ""
         self._title_label.setText(title)
         sub_parts = [artist or ""]
         if year and year > 0:
             sub_parts.append(str(year))
+        if album_fmt:
+            sub_parts.append(album_fmt)
         self._subtitle_label.setText(" · ".join(p for p in sub_parts if p))
 
         # Artwork
@@ -215,13 +218,16 @@ class AlbumExpanderPanel(QFrame):
 
         total_tracks = 0
         for album_data, tracks in albums_with_tracks:
-            # Album sub-header
-            album_header = QLabel(
-                f"{album_data.get('title', 'Unknown Album')}"
-                f" ({album_data.get('year', '')})"
-                if album_data.get('year') else
-                album_data.get('title', 'Unknown Album')
-            )
+            # Album sub-header with optional format tag
+            album_title = album_data.get('title', 'Unknown Album')
+            album_year = album_data.get('year')
+            album_fmt = get_album_format_tag(tracks) if tracks else ""
+            header_parts = [album_title]
+            if album_year:
+                header_parts.append(f"({album_year})")
+            if album_fmt:
+                header_parts.append(f"[{album_fmt}]")
+            album_header = QLabel(" ".join(header_parts))
             album_header.setFont(QFont(FONT_FAMILY, 11, QFont.Weight.DemiBold))
             album_header.setStyleSheet(f"""
                 color: {self._css_color(self._text_color)};
