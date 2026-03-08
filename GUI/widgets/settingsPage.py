@@ -46,8 +46,6 @@ class SettingRow(QFrame):
         self._layout.addLayout(text_layout, stretch=1)
 
         self._rebuild_row_styles()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_row_styles)
 
     def _rebuild_row_styles(self):
         """Rebuild styles from current theme palette."""
@@ -81,9 +79,6 @@ class ToggleRow(SettingRow):
         self._rebuild_toggle_style()
         self.checkbox.toggled.connect(self.changed.emit)
         self.add_control(self.checkbox)
-
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_toggle_style)
 
     def _rebuild_toggle_style(self):
         self.checkbox.setStyleSheet(f"""
@@ -134,9 +129,6 @@ class ComboRow(SettingRow):
                 self.combo.setCurrentIndex(idx)
         self.combo.currentTextChanged.connect(self.changed.emit)
         self.add_control(self.combo)
-
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_combo_style)
 
     def _rebuild_combo_style(self):
         self.combo.setStyleSheet(f"""
@@ -203,8 +195,6 @@ class FolderRow(SettingRow):
 
         self._full_path = path
         self._rebuild_folder_style()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_folder_style)
 
     def _rebuild_folder_style(self):
         self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
@@ -257,8 +247,6 @@ class ActionRow(SettingRow):
         self.add_control(self.action_btn)
 
         self._rebuild_action_style()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_action_style)
 
     def _rebuild_action_style(self):
         self.action_btn.setStyleSheet(btn_css(
@@ -312,8 +300,6 @@ class FileRow(SettingRow):
 
         self._full_path = path
         self._rebuild_file_style()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_file_style)
 
     def _rebuild_file_style(self):
         self.path_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
@@ -393,8 +379,6 @@ class ToolRow(SettingRow):
         self.add_control(container)
 
         self._rebuild_tool_style()
-        from ..theme import ThemeManager
-        ThemeManager.instance().theme_changed.connect(self._rebuild_tool_style)
 
     def _rebuild_tool_style(self):
         self.download_btn.setStyleSheet(btn_css(
@@ -522,7 +506,7 @@ class SettingsPage(QWidget):
 
         from ..theme import ThemeManager
         ThemeManager.instance().theme_changed.connect(self._rebuild_styles)
-        self._rebuild_styles()  # Apply initial theme styles
+        self._styles_dirty = True  # Will rebuild on first show
 
     # ── Panel builders ──────────────────────────────────────────────────────
 
@@ -822,8 +806,18 @@ class SettingsPage(QWidget):
         self._section_labels.append(label)
         return label
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if getattr(self, '_styles_dirty', False):
+            self._rebuild_styles()
+
     def _rebuild_styles(self):
         """Rebuild theme-sensitive inline styles on theme/accent change."""
+        if not self.isVisible():
+            self._styles_dirty = True
+            return
+        self._styles_dirty = False
+
         self._apply_sidebar_styles()
         # Title bar
         self._back_btn.setStyleSheet(f"""
@@ -849,6 +843,21 @@ class SettingsPage(QWidget):
                 border=f"1px solid {Colors.BORDER}",
                 padding="4px 8px",
             ))
+        # Rebuild all child row widget styles (centralized instead of individual connections)
+        for row in self.findChildren(SettingRow):
+            row._rebuild_row_styles()
+        for row in self.findChildren(ToggleRow):
+            row._rebuild_toggle_style()
+        for row in self.findChildren(ComboRow):
+            row._rebuild_combo_style()
+        for row in self.findChildren(FolderRow):
+            row._rebuild_folder_style()
+        for row in self.findChildren(FileRow):
+            row._rebuild_file_style()
+        for row in self.findChildren(ActionRow):
+            row._rebuild_action_style()
+        for row in self.findChildren(ToolRow):
+            row._rebuild_tool_style()
 
     def load_from_settings(self):
         """Populate UI controls from the current AppSettings."""

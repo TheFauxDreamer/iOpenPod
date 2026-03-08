@@ -29,6 +29,17 @@ _SVG_PAUSE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect 
 _SVG_NEXT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="4,3 16,12 4,21" fill="{c}"/><rect x="18" y="4" width="3" height="16" fill="{c}"/></svg>'
 
 
+def _color_to_hex(color_str: str) -> str:
+    """Convert a Colors.* value (rgba or hex) to #rrggbb for SVG fill."""
+    if color_str.startswith("#"):
+        return color_str
+    import re
+    m = re.match(r'rgba?\((\d+),\s*(\d+),\s*(\d+)', color_str)
+    if m:
+        return "#{:02x}{:02x}{:02x}".format(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return "#ffffff"
+
+
 def _svg_icon(svg_template: str, color: str, size: int = 24) -> QIcon:
     """Render an SVG template with the given fill color to a QIcon."""
     svg_data = svg_template.format(c=color).encode("utf-8")
@@ -261,7 +272,7 @@ class MiniPlayer(QFrame):
 
     def _update_transport_icons(self):
         """Rebuild transport button icons using the current theme color."""
-        c = Colors.TEXT_PRIMARY
+        c = _color_to_hex(Colors.TEXT_PRIMARY)
         self._prev_btn.setIcon(_svg_icon(_SVG_PREV, c))
         self._play_btn.setIcon(
             _svg_icon(_SVG_PAUSE, c) if self._is_playing
