@@ -149,6 +149,8 @@ class MusicBrowserGrid(QFrame):
             return
 
         items = self._pending_items
+        if items is None:
+            return
         start = self._pending_index
         end = min(start + self._BATCH_SIZE, len(items))
 

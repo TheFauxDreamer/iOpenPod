@@ -433,7 +433,7 @@ class PCLibraryCache(QObject):
             total_length_ms = sum(t.get("length", 0) for t in tracks)
             format_tag = get_album_format_tag(tracks)
 
-            subtitle_parts = [artist]
+            subtitle_parts = [artist or "Unknown Artist"]
             if year and year > 0:
                 subtitle_parts.append(str(year))
             subtitle_parts.append(f"{track_count} tracks")

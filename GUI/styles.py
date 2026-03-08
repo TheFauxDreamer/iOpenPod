@@ -80,7 +80,7 @@ class Metrics:
     BORDER_RADIUS_XL = 12
 
     GRID_ITEM_W = 172
-    GRID_ITEM_H = 240  # Was 230 — more text breathing room
+    GRID_ITEM_H = 224
     GRID_ART_SIZE = 152
     GRID_SPACING = 14
 

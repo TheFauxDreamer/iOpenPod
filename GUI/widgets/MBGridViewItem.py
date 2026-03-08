@@ -29,6 +29,7 @@ class MusicBrowserGridItem(QFrame):
         self.gridItemLayout = QVBoxLayout(self)
         self.gridItemLayout.setContentsMargins(10, 10, 10, 8)
         self.gridItemLayout.setSpacing(6)
+        self.gridItemLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.worker = None
         self._cancellation_token = None
